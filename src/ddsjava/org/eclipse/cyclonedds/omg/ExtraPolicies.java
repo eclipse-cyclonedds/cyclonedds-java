@@ -18,6 +18,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import org.omg.dds.core.*;
 import org.omg.dds.core.policy.*;
+import org.eclipse.cyclonedds.core.policy.*;
 
 /** Immutable policy values implementing the normative policy interfaces. */
 final class ExtraPolicies implements InvocationHandler, Serializable {
@@ -28,12 +29,15 @@ final class ExtraPolicies implements InvocationHandler, Serializable {
     private ExtraPolicies(ServiceEnvironment env, Class<?> api, Map<String, Object> properties) {
         this.env = env; this.api = api; this.properties = Map.copyOf(properties);
     }
+    static final Set<Class<?>> EXTENSIONS = Set.of(Property.class, BinaryProperty.class,
+        EntityName.class, IgnoreLocal.class, WriterBatching.class, PsmxInstances.class);
     static final Set<Class<?>> SUPPORTED = Set.of(Durability.class, ResourceLimits.class, Partition.class,
         Deadline.class, Lifespan.class, Liveliness.class, Ownership.class, OwnershipStrength.class,
         WriterDataLifecycle.class, TimeBasedFilter.class, DurabilityService.class,
         DestinationOrder.class, UserData.class, GroupData.class, TopicData.class,
         ReaderDataLifecycle.class, TypeConsistencyEnforcement.class, LatencyBudget.class,
-        TransportPriority.class, EntityFactory.class, DataRepresentation.class, Presentation.class);
+        TransportPriority.class, EntityFactory.class, DataRepresentation.class, Presentation.class,
+        Property.class, BinaryProperty.class, EntityName.class, IgnoreLocal.class, WriterBatching.class, PsmxInstances.class);
     static <T> T create(ServiceEnvironment env, Class<T> api) {
         Duration infinity = new Values.DdsDuration(env, Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         Map<String, Object> values;
@@ -52,17 +56,26 @@ final class ExtraPolicies implements InvocationHandler, Serializable {
         else if (api == DestinationOrder.class) values = Map.of("Kind", DestinationOrder.Kind.BY_RECEPTION_TIMESTAMP);
         else if (api == UserData.class || api == GroupData.class || api == TopicData.class) values = Map.of("Value", new byte[0]);
         else if (api == ReaderDataLifecycle.class) values = Map.of("AutoPurgeNoWriterSamplesDelay", infinity, "AutoPurgeDisposedSamplesDelay", infinity);
-        else if (api == TypeConsistencyEnforcement.class) values = Map.of("Kind", TypeConsistencyEnforcement.Kind.ASSIGNABLE_TYPE_CONSISTENCY);
+        else if (TypeConsistencyEnforcement.class.isAssignableFrom(api)) values = Map.of("Kind", TypeConsistencyEnforcement.Kind.ASSIGNABLE_TYPE_CONSISTENCY,
+            "IgnoreSequenceBounds", true, "IgnoreStringBounds", true, "IgnoreMemberNames", false,
+            "PreventTypeWidening", false, "ForceTypeValidation", true);
         else if (api == LatencyBudget.class) values = Map.of("Duration", new Values.DdsDuration(env, 0, TimeUnit.NANOSECONDS));
         else if (api == TransportPriority.class) values = Map.of("Value", 0);
         else if (api == EntityFactory.class) values = Map.of("AutoEnableCreatedEntities", true);
         else if (api == DataRepresentation.class) values = Map.of("Value", List.of((short) 2));
         else if (api == Presentation.class) values = Map.of("AccessScope", Presentation.AccessScopeKind.INSTANCE, "CoherentAccess", false, "OrderedAccess", false);
+        else if (api == Property.class || api == BinaryProperty.class) values = Map.of("Value", Map.of());
+        else if (api == EntityName.class) values = Map.of("Name", "");
+        else if (api == IgnoreLocal.class) values = Map.of("Kind", IgnoreLocal.Kind.NOTHING);
+        else if (api == WriterBatching.class) values = Map.of("Enabled", false);
+        else if (api == PsmxInstances.class) values = Map.of("Names", List.of());
         else throw Policies.unsupported(api.getSimpleName());
         return proxy(env, api, values);
     }
     static <T> T proxy(ServiceEnvironment env, Class<T> api, Map<String, Object> values) {
-        return api.cast(Proxy.newProxyInstance(api.getClassLoader(), new Class<?>[]{api}, new ExtraPolicies(env, api, values)));
+        Class<?> implementation = TypeConsistencyEnforcement.class.isAssignableFrom(api) ? TypeConsistency.class : api;
+        return api.cast(Proxy.newProxyInstance(implementation.getClassLoader(), new Class<?>[]{implementation},
+            new ExtraPolicies(env, implementation, values)));
     }
     public Object invoke(Object self, Method method, Object[] arguments) throws Throwable {
         Object[] args = arguments == null ? new Object[0] : arguments;
@@ -87,9 +100,23 @@ final class ExtraPolicies implements InvocationHandler, Serializable {
             Object value = properties.get(op.substring(op.startsWith("get") ? 3 : 2));
             return value instanceof byte[] bytes ? bytes.clone() : value;
         }
-        if (op.equals("requestedOfferedContract")) return self;
+        if (op.equals("requestedOfferedContract")) {
+            if (api == DataRepresentation.class) return (Comparable<DataRepresentation>) other -> {
+                if (Collections.disjoint(((DataRepresentation) self).getValue(), other.getValue()))
+                    throw new IllegalArgumentException("Disjoint data representations have no request/offer ordering; use isRepresentationCompatible");
+                return 0;
+            };
+            return self;
+        }
         if (op.equals("compareTo")) {
             Object other = api.cast(args[0]);
+            if (api == DataRepresentation.class) {
+                List<Short> a = ((DataRepresentation) self).getValue(), b = ((DataRepresentation) other).getValue();
+                for (int i = 0; i < Math.min(a.size(), b.size()); i++) {
+                    int order = Short.compare(a.get(i), b.get(i)); if (order != 0) return order;
+                }
+                return Integer.compare(a.size(), b.size());
+            }
             int kind = properties.containsKey("Kind") ? Integer.compare(((Enum<?>) properties.get("Kind")).ordinal(),
                 ((Enum<?>) api.getMethod("getKind").invoke(other)).ordinal()) : 0;
             if (kind != 0) return kind;
@@ -104,6 +131,14 @@ final class ExtraPolicies implements InvocationHandler, Serializable {
             if (duration != null) return ((Duration) api.getMethod("get" + duration).invoke(other)).compareTo((Duration) properties.get(duration));
             return 0;
         }
+        if ((api == Property.class || api == BinaryProperty.class) && (op.equals("withValue") || op.equals("without"))) {
+            String name = PolicyText.require((String) args[0]);
+            @SuppressWarnings("unchecked") var entries = new LinkedHashMap<>((Map<String, Object>) properties.get("Value"));
+            if (op.equals("without")) entries.remove(name);
+            else entries.put(name, api == Property.class ? new Property.Value((String) args[1], (Boolean) args[2])
+                : new BinaryProperty.Value((byte[]) args[1], (Boolean) args[2]));
+            return proxy(env, api, Map.of("Value", Collections.unmodifiableMap(entries)));
+        }
         if (op.startsWith("with")) {
             var changed = new LinkedHashMap<>(properties);
             String property = op.substring(4);
@@ -112,7 +147,7 @@ final class ExtraPolicies implements InvocationHandler, Serializable {
                 property = api == Presentation.class ? "AccessScope" : "Kind";
                 String variant = op.substring(4);
                 if (api == DestinationOrder.class) value = variant.equals("ReceptionTimestamp") ? DestinationOrder.Kind.BY_RECEPTION_TIMESTAMP : DestinationOrder.Kind.BY_SOURCE_TIMESTAMP;
-                else if (api == TypeConsistencyEnforcement.class) value = switch (variant) {
+                else if (TypeConsistencyEnforcement.class.isAssignableFrom(api)) value = switch (variant) {
                     case "ExactTypeTypeConsistency" -> TypeConsistencyEnforcement.Kind.EXACT_TYPE_TYPE_CONSISTENCY;
                     case "ExactNameTypeConsistency" -> TypeConsistencyEnforcement.Kind.EXACT_NAME_TYPE_CONSISTENCY;
                     case "DeclaredTypeConsistency" -> TypeConsistencyEnforcement.Kind.DECLARED_TYPE_CONSISTENCY;
@@ -149,6 +184,13 @@ final class ExtraPolicies implements InvocationHandler, Serializable {
             if (value instanceof Duration duration && duration.getEnvironment() != env) throw new IllegalArgumentException("Foreign duration");
             if ((api == ResourceLimits.class || api == DurabilityService.class && property.startsWith("Max")) && ((Integer) value == 0 || (Integer) value < -1)) throw new IllegalArgumentException("Resource limit must be positive or LENGTH_UNLIMITED");
             if (api == DurabilityService.class && property.equals("HistoryDepth") && (Integer) value < 1) throw new IllegalArgumentException("History depth must be positive");
+            if (api == EntityName.class) value = PolicyText.require((String) value);
+            if (api == PsmxInstances.class) {
+                List<String> names = new ArrayList<>();
+                for (Object name : (Collection<?>) value) names.add(PolicyText.require((String) name));
+                if (new HashSet<>(names).size() != names.size()) throw new IllegalArgumentException("Duplicate PSMX instance");
+                value = List.copyOf(names);
+            }
             if (api == Partition.class) {
                 Set<String> names = new LinkedHashSet<>();
                 for (Object name : (Collection<?>) value) {

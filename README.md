@@ -3,20 +3,31 @@
 [![Website](https://img.shields.io/badge/web-cyclonedds.io-blue)](https://cyclonedds.io)
 [![Community](https://img.shields.io/badge/discord-join%20community-5865f2)](https://discord.gg/BkRYQPpZVV)
 
-The official Java binding for [Eclipse Cyclone DDS](https://github.com/eclipse-cyclonedds/cyclonedds).
+The official Java binding for [Eclipse Cyclone DDS](https://github.com/eclipse-cyclonedds/cyclonedds) using the **official OMG DDS-Java API** and generated IDL4-Java types.
 
-Java binding for Cyclone DDS using the **official OMG DDS-Java API** and generated
-IDL4-Java types. Two clearly separated artifacts are provided:
+Two artifacts are provided:
 
 * **`org.eclipse.cyclonedds`**: Java API, provider, DDS core and JNI libraries for runtime use.
 * **`org.eclipse.cyclonedds.idlc`**: IDL compilers, platform libraries, command-line launcher and Maven build integration.
 
-Both use version **11.0.1** and select their platform automatically. The compiler
-package is build-time only and is not an application runtime dependency.
+## Quick start
 
-**Status:** experimental, with a tested API subset. Full OMG profile conformance
-and production maturity are not established. See [coverage](docs/manual/standards.rst)
-and the [RTI/OpenSplice comparison](docs/manual/comparison.rst).
+Use JDK 17+ and Maven 3.9+. Add this dependency to your project's `pom.xml`:
+
+```xml
+<dependency>
+  <groupId>org.eclipse.cyclonedds</groupId>
+  <artifactId>org.eclipse.cyclonedds</artifactId>
+  <version>11.0.1</version>
+</dependency>
+```
+
+Run `mvn package`; the runtime includes the matching native libraries for your
+platform. For your own IDL types, add the generator shown below.
+
+Then see [the example](#example) and [the docs](docs/manual/index.rst) to get started.
+
+## Example
 
 ## 1. Generate a type
 
@@ -66,10 +77,6 @@ IDL generator to your Maven project's `pom.xml`:
 before compiling the application. The `org.eclipse.cyclonedds.idlc` build tool
 uses its own bundled compiler. No CMake, C compiler, GitHub checkout or manually installed `idlc` is needed in an application project.
 Use JDK 17+ and Maven 3.9+.
-
-**Publication status:** these artifacts are implemented and tested locally but
-are not yet published to Maven Central. Until publication, use a Maven repository
-containing the artifacts or the [maintainer installation workflow](docs/manual/maven.rst).
 
 No platform classifier or OS profiles are needed in the POM. The universal
 release build requires Linux on x86-64 and ARM64, macOS on ARM64, and Windows on
@@ -140,18 +147,7 @@ mvn org.codehaus.mojo:exec-maven-plugin:3.5.0:java -Dexec.mainClass=Demo
 Output: `Hello from Java!`. The runtime JAR loads its matching bundled native
 libraries automatically; application code needs no native search-path setup.
 
-For separate publisher/subscriber processes, see
-[HelloWorld](examples/helloworld/java/org/eclipse/cyclonedds/examples/HelloWorld.java).
-The [manual](docs/manual/index.rst) covers QoS, instance selectors, conditions,
-type mappings and installation.
-
-Readers and writers also support listener callbacks, standard status getters,
-query conditions and content filters, next-instance traversal, key lookup and
-timestamped registration overloads. See the short [operation examples and
-restrictions](docs/manual/howtos/operations.rst), including callback threading and
-the supported SQL subset.
-
-## Build the binding
+## Build the package from source
 
 Requirements: JDK 17+, CMake 3.21+, a C11 compiler and a Cyclone DDS installation
 with `idlc`, IDL/DDSI development headers and type-library support. The tested core
@@ -160,7 +156,6 @@ No Cyclone DDS core patches are required. Build that core first:
 
 ```sh
 git clone https://github.com/eclipse-cyclonedds/cyclonedds.git core
-git -C core checkout 3a5526315e64ac1d2a52e6ac1ae7f3e861c593d3
 cmake -S core -B core-build -DCMAKE_INSTALL_PREFIX="$PWD/core-install" \
   -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DENABLE_SECURITY=OFF -DENABLE_SSL=OFF
 cmake --build core-build --parallel
@@ -184,10 +179,6 @@ standard API behavior, three independent C interoperability paths, a Java-only
 installed consumer, and bundled-native loading with native search paths disabled.
 Local validation is macOS ARM64; Linux, macOS ARM64 and Windows x86-64 CI is configured.
 
-The [upstream test ledger](tests/upstream/README.md) compares pinned fresh Python
-and C++ downloads with runnable Java scenarios. It records remaining gaps;
-complete upstream test parity is not yet established.
-
 To build and install the Maven artifacts locally, make Maven available when
 configuring CMake, then run:
 
@@ -199,35 +190,3 @@ This installs `org.eclipse.cyclonedds` (runtime) and `org.eclipse.cyclonedds.idl
 (compiler plus Maven integration) into the local Maven repository. It does not
 publish to a remote repository. See [Maven packaging and validation](docs/manual/maven.rst)
 and [distribution details](docs/manual/distribution.rst).
-
-## License
-
-EPL 2.0 or EDL 1.0, using the exact [LICENSE](LICENSE) from the Cyclone DDS Python
-binding. Bundled third-party components retain their notices; see
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-XCDR2 is the default. To use XCDR1, set the writer's representation policy to
-`policyFactory.Representation().withValue((short) 0)`; readers can accept both
-with `withValue((short) 0, (short) 2)`. Optional and mutable fields and top-level appendable evolution are supported
-within the unmodified core's representation limits. Generated type support records
-those limits and rejects unsupported XCDR1 endpoint configurations. Regenerate
-existing types when upgrading.
-See [IDL and wire formats](docs/manual/howtos/idl.rst) for nested appendable
-layout restrictions.
-
-Discovery metadata is available through `participant.getBuiltinSubscriber()`,
-`reader.getMatchedPublicationData(handle)` and
-`writer.getMatchedSubscriptionData(handle)`. The
-[operations guide](docs/manual/howtos/operations.rst) includes a built-in reader
-example and documents the available metadata.
-
-## Runnable examples
-
-See [the example catalog](examples/README.md) for HelloWorld, roundtrip, throughput,
-vehicles, asynchronous reception, all four built-in topics, DDS listeners,
-waitsets and instance lifecycle. Build with `-DBUILD_EXAMPLES=ON` and start with:
-
-```sh
-java @build/examples/java.args org.eclipse.cyclonedds.examples.SimpleHelloWorld
-java @build/examples/java.args org.eclipse.cyclonedds.examples.Listeners
-```

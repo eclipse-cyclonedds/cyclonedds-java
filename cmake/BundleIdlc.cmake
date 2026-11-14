@@ -60,7 +60,7 @@ endforeach()
 file(WRITE "${payload}/files.sha256" "${manifest}")
 file(WRITE "${STAGING}/META-INF/cyclonedds-idlc/platforms.list" "${PLATFORM}\n")
 file(WRITE "${STAGING}/META-INF/cyclonedds/bundle.properties" "version=${VERSION}\nkind=compiler\nplatform=${PLATFORM}\n")
-file(COPY "${SOURCE_DIR}/LICENSE" "${SOURCE_DIR}/THIRD_PARTY_NOTICES.md" DESTINATION "${STAGING}/META-INF")
+file(COPY "${SOURCE_DIR}/LICENSE" DESTINATION "${STAGING}/META-INF")
 file(COPY "${SOURCE_DIR}/third_party/cyclonedds/LICENSE" "${SOURCE_DIR}/third_party/cyclonedds/NOTICE.md"
   DESTINATION "${STAGING}/META-INF/cyclonedds")
 file(COPY "${SOURCE_DIR}/third_party/idlc/LICENSE-mcpp" DESTINATION "${STAGING}/META-INF/cyclonedds")

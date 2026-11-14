@@ -49,9 +49,9 @@ Complete the SQL grammar and unsigned comparisons, remove the bridge's 64-query
 callback limit when the core supplies a context-bearing API, and expose full
 per-policy incompatibility counts if the core makes them available. Timestamped
 registration is a local operation with no stored/source timestamp. Complete the
-remaining standard writer/reader operations. Dynamic types, coherent access and XML QoS
-profiles remain unsupported. Built-in discovery and matched endpoint metadata are
-implemented; their introspection restrictions are documented in :doc:`howtos/operations`. Next-sample storage currently requires a sample
+remaining standard writer/reader operations. Dynamic types and coherent access
+remain unsupported. XML QoS profiles for the six native entity kinds are
+implemented. Built-in discovery and matched endpoint metadata are implemented; their introspection restrictions are documented in :doc:`howtos/operations`. Next-sample storage currently requires a sample
 returned by this provider; arbitrary user sample implementations are rejected.
 
 Remaining QoS work
@@ -65,8 +65,14 @@ updates; an independent C peer verifies discovery metadata. The core time-based
 filter is tested at reader creation; enabled interval changes are rejected because
 the unmodified cache does not apply them.
 
-Remaining restrictions include finite reader auto-purge timers, legacy
-exact-name/declared consistency modes, disabled entities, coherent/ordered access,
+Cyclone extension policies now expose string/binary properties and propagation,
+entity names, IgnoreLocal, writer batching/flush, PSMX instance selection and all
+five modern type-consistency flags. Effective native values and discovery
+snapshots are available through extension helpers. XML QoS profiles use the core
+parser, including inheritance and named entity QoS.
+
+Remaining restrictions include participant-factory XML profiles, finite reader
+auto-purge timers, legacy exact-name/declared consistency modes, disabled entities, coherent/ordered access,
 external persistent/transient durability services.
 Enabled changes to matching policies remain restricted by the core and fail
 explicitly. More lifecycle combinations and distributed stress tests remain work.

@@ -25,7 +25,7 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
     <dependency><groupId>org.apache.maven.plugin-tools</groupId><artifactId>maven-plugin-annotations</artifactId><version>3.15.1</version><scope>provided</scope></dependency>
   </dependencies>
   <build>
-    <resources><resource><directory>../../</directory><targetPath>META-INF</targetPath><includes><include>LICENSE</include><include>THIRD_PARTY_NOTICES.md</include></includes></resource></resources>
+    <resources><resource><directory>../../</directory><targetPath>META-INF</targetPath><includes><include>LICENSE</include></includes></resource></resources>
     <plugins>
       <plugin><groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.1</version>
         <executions><execution><id>maven-integration</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals>

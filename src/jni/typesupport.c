@@ -16,6 +16,8 @@
 #include <limits.h>
 #include "typesupport.h"
 #include "dds/ddsrt/heap.h"
+#include "dds/ddsc/dds_psmx.h"
+#include "dds/ddsc/dds_loaned_sample.h"
 #include "dds/ddsrt/string.h"
 #include "dds/ddsrt/endian.h"
 #include "dds/ddsrt/md5.h"
@@ -76,6 +78,7 @@ static struct java_data *new_data(const struct ddsi_sertype *type, enum ddsi_ser
 
 static void data_free(struct ddsi_serdata *base) {
   struct java_data *d = (struct java_data *) base;
+  if (base->loan) dds_loaned_sample_unref(base->loan);
   ddsrt_free(d->bytes); ddsrt_free(d->key); ddsrt_free(d);
 }
 
@@ -324,11 +327,37 @@ static bool serialize_into(const struct ddsi_sertype *type, enum ddsi_serdata_ki
   memcpy(destination, s->bytes + 4, s->size - 4); return true;
 }
 
+/* PSMX exchanges serialized CDR, never Java objects or C-layout application samples. */
+static struct ddsi_serdata *from_psmx(const struct ddsi_sertype *type, dds_loaned_sample_t *loan) {
+  const dds_psmx_metadata_t *md = loan->metadata;
+  enum ddsi_serdata_kind kind;
+  if (md->sample_state == DDS_LOANED_SAMPLE_STATE_SERIALIZED_DATA) kind = SDK_DATA;
+  else if (md->sample_state == DDS_LOANED_SAMPLE_STATE_SERIALIZED_KEY) kind = SDK_KEY;
+  else return NULL;
+  if (md->sample_size > UINT32_MAX - 7) return NULL;
+  struct java_data *d = new_data(type, kind, (size_t)md->sample_size + 4);
+  if (!d) return NULL;
+  memcpy(d->bytes, &md->cdr_identifier, 2);
+  memcpy(d->bytes + 2, &md->cdr_options, 2);
+  if (md->sample_size) memcpy(d->bytes + 4, loan->sample_ptr, md->sample_size);
+  struct ddsi_serdata *result = finish_data(d);
+  if (result) { result->timestamp.v = md->timestamp; result->statusinfo = md->statusinfo; }
+  return result;
+}
+static struct ddsi_serdata *from_loan(const struct ddsi_sertype *type, enum ddsi_serdata_kind kind,
+    const char *sample, dds_loaned_sample_t *loan, bool will_require_cdr) {
+  (void)will_require_cdr;
+  struct ddsi_serdata *result = from_sample(type, kind, sample);
+  if (result) result->loan = loan; /* Ownership transfers only after successful serialization. */
+  return result;
+}
+
 static const struct ddsi_serdata_ops data_ops = {
   .eqkey = eqkey, .get_size = data_size, .from_ser = from_fragments, .from_ser_iov = from_iov,
   .from_keyhash = from_keyhash, .from_sample = from_sample, .to_ser = to_ser, .to_ser_ref = to_ref,
   .to_ser_unref = release_ref, .to_sample = to_sample, .to_untyped = to_untyped,
-  .untyped_to_sample = untyped_to_sample, .free = data_free, .print = print_data, .get_keyhash = keyhash
+  .untyped_to_sample = untyped_to_sample, .free = data_free, .print = print_data, .get_keyhash = keyhash,
+  .from_loaned_sample = from_loan, .from_psmx = from_psmx
 };
 static const struct ddsi_sertype_ops type_ops = {
   .version = ddsi_sertype_v0, .free = type_free, .zero_samples = zero_samples,

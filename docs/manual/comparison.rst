@@ -73,7 +73,9 @@ Listeners, standard status getters, query/content filters, key-value reconstruct
 and next-instance traversal are now implemented and integration-tested, with
 restrictions documented in :doc:`howtos/operations`. Built-in discovery and matched
 endpoint metadata are implemented. Concrete gaps include dynamic types, coherent
-access, XML QoS and complete mapping annotations.
+access, participant-factory XML QoS and complete mapping annotations. Native XML
+profiles for participants, topics, publishers, subscribers, readers and writers
+are supported.
 Mutable/optional/external/recursive IDL, inheritance and wide text now have
 independent C interoperability tests; :doc:`howtos/idl` records their restrictions. Java entity dispatch currently uses dynamic proxies; typed
 implementation classes and broader lifecycle/failure audits remain maintainability

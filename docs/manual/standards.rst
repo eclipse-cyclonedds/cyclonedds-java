@@ -74,8 +74,8 @@ DDS-Java implementation coverage
      - Topic dependency checks, outstanding sample iterator checks, contained entity closure, closed-object exceptions
      - Full profile lifecycle validation across every optional entity kind
    * - QoS
-     - Immutable views; reliability/history, durability/retention, resource limits, partition, deadline, lifespan, liveliness, ownership/strength, filtering, writer lifecycle, destination order, binary user/group/topic data, latency/priority, reader lifecycle API, exact/assignable consistency, representation/entity-factory/presentation values; native updates
-     - Finite reader auto-purge timers, legacy exact-name/declared consistency, coherent/ordered presentation, disabled entities, external durability service, core-restricted enabled updates, XML profiles
+     - Immutable views; reliability/history, durability/retention, resource limits, partition, deadline, lifespan, liveliness, ownership/strength, filtering, writer lifecycle, destination order, binary user/group/topic data, latency/priority, reader lifecycle API, exact/assignable consistency, representation/entity-factory/presentation values; native updates; Cyclone extension policies and native XML profiles
+     - Finite reader auto-purge timers, legacy exact-name/declared consistency, coherent/ordered presentation, disabled entities, external durability service, core-restricted enabled updates, participant-factory XML profiles
    * - Writer
      - Ordinary/timestamped writes, matched handles, acknowledgment waits, ordinary/timestamped registration overloads, lookup, key-value reconstruction, handle-based dispose/unregister
      - Registration has no wire-visible timestamp; full per-policy incompatibility counts are unavailable

@@ -39,15 +39,109 @@ static void fail(JNIEnv *env, const char *operation, dds_return_t code) {
   if (exception) (*env)->Throw(env, exception);
 }
 
+#define QOS_VALUE_COUNT 40
+
+static jobject qos_field(JNIEnv *env, jobject object, const char *name, const char *signature) {
+  if (!object || (*env)->ExceptionCheck(env)) return NULL;
+  jclass type = (*env)->GetObjectClass(env, object);
+  if (!type) return NULL;
+  jfieldID field = (*env)->GetFieldID(env, type, name, signature);
+  jobject result = field ? (*env)->GetObjectField(env, object, field) : NULL;
+  (*env)->DeleteLocalRef(env, type);
+  return result;
+}
+static char *qos_text(JNIEnv *env, jbyteArray bytes) {
+  if (!bytes) { fail(env, "Null QoS string", DDS_RETCODE_BAD_PARAMETER); return NULL; }
+  jsize size = (*env)->GetArrayLength(env, bytes);
+  char *value = malloc((size_t)size + 1);
+  if (!value) { fail(env, "Allocate QoS string", DDS_RETCODE_OUT_OF_RESOURCES); return NULL; }
+  (*env)->GetByteArrayRegion(env, bytes, 0, size, (jbyte *)value);
+  value[size] = 0;
+  if ((*env)->ExceptionCheck(env) || memchr(value, 0, (size_t)size)) {
+    free(value); fail(env, "NUL in QoS string", DDS_RETCODE_BAD_PARAMETER); return NULL;
+  }
+  return value;
+}
+static jbyteArray qos_byte_array(JNIEnv *env, const void *bytes, size_t size) {
+  if (size > INT_MAX) { fail(env, "QoS value exceeds Java limits", DDS_RETCODE_OUT_OF_RESOURCES); return NULL; }
+  jbyteArray result = (*env)->NewByteArray(env, (jsize)size);
+  if (result && size) (*env)->SetByteArrayRegion(env, result, 0, (jsize)size, bytes);
+  return result;
+}
+static bool configure_properties(JNIEnv *env, dds_qos_t *qos, jobjectArray entries, bool binary) {
+  if (!entries) return true;
+  /* Preserve an explicitly empty property policy, allowing setQos to clear it. */
+  if (binary) { dds_qset_bprop_propagate(qos, "", NULL, 0, false); dds_qunset_bprop(qos, ""); }
+  else { dds_qset_prop_propagate(qos, "", "", false); dds_qunset_prop(qos, ""); }
+  jsize count = (*env)->GetArrayLength(env, entries);
+  for (jsize i = 0; i < count; i++) {
+    if ((*env)->PushLocalFrame(env, 8) < 0) return false;
+    jobject entry = (*env)->GetObjectArrayElement(env, entries, i);
+    jbyteArray name = qos_field(env, entry, "name", "[B");
+    jbyteArray value = qos_field(env, entry, "value", "[B");
+    jclass type = entry ? (*env)->GetObjectClass(env, entry) : NULL;
+    jfieldID field = type ? (*env)->GetFieldID(env, type, "propagate", "Z") : NULL;
+    bool propagate = field && (*env)->GetBooleanField(env, entry, field);
+    char *key = !(*env)->ExceptionCheck(env) ? qos_text(env, name) : NULL;
+    if (key && value && !(*env)->ExceptionCheck(env)) {
+      if (binary) {
+        jsize size = (*env)->GetArrayLength(env, value);
+        jbyte *bytes = size ? (*env)->GetByteArrayElements(env, value, NULL) : NULL;
+        if (!size || bytes) dds_qset_bprop_propagate(qos, key, bytes, (size_t)size, propagate);
+        if (bytes) (*env)->ReleaseByteArrayElements(env, value, bytes, JNI_ABORT);
+      } else {
+        char *text = qos_text(env, value);
+        if (text) dds_qset_prop_propagate(qos, key, text, propagate);
+        free(text);
+      }
+    } else if (!(*env)->ExceptionCheck(env)) fail(env, "Invalid QoS property", DDS_RETCODE_BAD_PARAMETER);
+    free(key);
+    (*env)->PopLocalFrame(env, NULL);
+    if ((*env)->ExceptionCheck(env)) return false;
+  }
+  return true;
+}
+static bool configure_extensions(JNIEnv *env, dds_qos_t *qos, jobject extensions) {
+  if (!extensions) return true;
+  if ((*env)->PushLocalFrame(env, 10) < 0) return false;
+  jobjectArray props = qos_field(env, extensions, "properties", "[Lorg/eclipse/cyclonedds/internal/Native$Property;");
+  jobjectArray binary = qos_field(env, extensions, "binaryProperties", "[Lorg/eclipse/cyclonedds/internal/Native$Property;");
+  jbyteArray name = qos_field(env, extensions, "entityName", "[B");
+  jobjectArray psmx = qos_field(env, extensions, "psmxInstances", "[[B");
+  bool ok = !(*env)->ExceptionCheck(env) && configure_properties(env, qos, props, false)
+    && configure_properties(env, qos, binary, true);
+  if (ok && name) {
+    char *text = qos_text(env, name);
+    if (text) dds_qset_entity_name(qos, text); else ok = false;
+    free(text);
+  }
+  if (ok && psmx) {
+    jsize count = (*env)->GetArrayLength(env, psmx);
+    char **names = calloc((size_t)count + 1, sizeof(*names));
+    if (!names) { fail(env, "Allocate PSMX names", DDS_RETCODE_OUT_OF_RESOURCES); ok = false; }
+    for (jsize i = 0; ok && i < count; i++) {
+      jbyteArray bytes = (*env)->GetObjectArrayElement(env, psmx, i);
+      names[i] = qos_text(env, bytes);
+      if (bytes) (*env)->DeleteLocalRef(env, bytes);
+      if (!names[i]) ok = false;
+    }
+    if (ok) dds_qset_psmx_instances(qos, (uint32_t)count, (const char **)names);
+    if (names) for (jsize i = 0; i < count; i++) free(names[i]);
+    free(names);
+  }
+  (*env)->PopLocalFrame(env, NULL);
+  return ok && !(*env)->ExceptionCheck(env);
+}
+
 static dds_qos_t *configured_values(JNIEnv *env, jlongArray configuration) {
   dds_qos_t *qos = dds_create_qos();
   if (!qos) { fail(env, "Allocate QoS", DDS_RETCODE_OUT_OF_RESOURCES); return NULL; }
   if (!configuration) return qos;
-  if ((*env)->GetArrayLength(env, configuration) != 33) {
+  if ((*env)->GetArrayLength(env, configuration) != QOS_VALUE_COUNT) {
     dds_delete_qos(qos); fail(env, "QoS configuration", DDS_RETCODE_BAD_PARAMETER); return NULL;
   }
-  jlong v[33];
-  (*env)->GetLongArrayRegion(env, configuration, 0, 33, v);
+  jlong v[QOS_VALUE_COUNT];
+  (*env)->GetLongArrayRegion(env, configuration, 0, QOS_VALUE_COUNT, v);
   if ((*env)->ExceptionCheck(env)) { dds_delete_qos(qos); return NULL; }
   if (v[0] >= 0) {
     dds_qset_reliability(qos, (dds_reliability_kind_t) v[0], v[1]);
@@ -68,7 +162,7 @@ static dds_qos_t *configured_values(JNIEnv *env, jlongArray configuration) {
   if (v[23] >= 0) dds_qset_latency_budget(qos, v[23]);
   if (v[32]) dds_qset_transport_priority(qos, (int32_t) v[24]);
   if (v[25] >= 0) dds_qset_reader_data_lifecycle(qos, v[25], v[26]);
-  if (v[27] >= 0) dds_qset_type_consistency(qos, (dds_type_consistency_kind_t) v[27], true, true, false, false, true);
+  if (v[27] >= 0) dds_qset_type_consistency(qos, (dds_type_consistency_kind_t) v[27], v[35] != 0, v[36] != 0, v[37] != 0, v[38] != 0, v[39] != 0);
   if (v[28] >= 0) {
     dds_data_representation_id_t representations[2]; uint32_t count = 0;
     if (v[28] & 1) representations[count++] = DDS_DATA_REPRESENTATION_XCDR1;
@@ -76,6 +170,8 @@ static dds_qos_t *configured_values(JNIEnv *env, jlongArray configuration) {
     dds_qset_data_representation(qos, count, representations);
   }
   if (v[29] >= 0) dds_qset_presentation(qos, (dds_presentation_access_scope_kind_t) v[29], v[30] != 0, v[31] != 0);
+  if (v[33] >= 0) dds_qset_ignorelocal(qos, (dds_ignorelocal_kind_t)v[33]);
+  if (v[34] >= 0) dds_qset_writer_batching(qos, v[34] != 0);
   return qos;
 }
 static bool configure_partitions(JNIEnv *env, dds_qos_t *qos, jobjectArray partitions) {
@@ -118,7 +214,8 @@ static dds_qos_t *configured_qos(JNIEnv *env, jobject configuration) {
   jobjectArray partitions = (*env)->GetObjectField(env, configuration, partitions_id);
   dds_qos_t *qos = configured_values(env, values);
   if (!qos) return NULL;
-  bool ok = configure_partitions(env, qos, partitions);
+  jobject extensions = qos_field(env, configuration, "extensions", "Lorg/eclipse/cyclonedds/internal/Native$Extensions;");
+  bool ok = !(*env)->ExceptionCheck(env) && configure_partitions(env, qos, partitions) && configure_extensions(env, qos, extensions);
   if (ok && data && (*env)->GetArrayLength(env, data) != 3) { fail(env, "QoS byte data", DDS_RETCODE_BAD_PARAMETER); ok = false; }
   for (jsize i = 0; ok && data && i < 3; i++) {
     jbyteArray value = (*env)->GetObjectArrayElement(env, data, i);
@@ -135,7 +232,7 @@ static dds_qos_t *configured_qos(JNIEnv *env, jobject configuration) {
     (*env)->DeleteLocalRef(env, value);
   }
   (*env)->DeleteLocalRef(env, values); (*env)->DeleteLocalRef(env, data);
-  (*env)->DeleteLocalRef(env, partitions); (*env)->DeleteLocalRef(env, cls);
+  (*env)->DeleteLocalRef(env, partitions); (*env)->DeleteLocalRef(env, extensions); (*env)->DeleteLocalRef(env, cls);
   if (!ok) { dds_delete_qos(qos); return NULL; }
   return qos;
 }
@@ -376,9 +473,64 @@ static jstring discovery_string(JNIEnv *env, const char *value) {
   jstring result = encoding ? (*env)->NewObject(env, type, ctor, bytes, encoding) : NULL;
   return (*env)->PopLocalFrame(env, result);
 }
+static jobjectArray snapshot_properties(JNIEnv *env, const dds_qos_t *qos, bool binary) {
+  uint32_t count = 0; char **names = NULL;
+  bool present = binary ? dds_qget_bpropnames(qos, &count, &names) : dds_qget_propnames(qos, &count, &names);
+  if (!present) return NULL;
+  jclass type = (*env)->FindClass(env, "org/eclipse/cyclonedds/internal/Native$Property");
+  jmethodID ctor = type ? (*env)->GetMethodID(env, type, "<init>", "([B[BZ)V") : NULL;
+  jobjectArray result = ctor ? (*env)->NewObjectArray(env, (jsize)count, type, NULL) : NULL;
+  for (uint32_t i = 0; i < count; i++) {
+    if (result && !(*env)->ExceptionCheck(env) && (*env)->PushLocalFrame(env, 6) >= 0) {
+      void *value = NULL; size_t size = 0; bool propagate = false;
+      bool found;
+      if (binary) found = dds_qget_bprop_propagate(qos, names[i], &value, &size, &propagate);
+      else { char *text = NULL; found = dds_qget_prop_propagate(qos, names[i], &text, &propagate); value = text; size = text ? strlen(text) : 0; }
+      jbyteArray name = qos_byte_array(env, names[i], strlen(names[i]));
+      jbyteArray bytes = !(*env)->ExceptionCheck(env) ? qos_byte_array(env, value, size) : NULL;
+      jobject entry = name && bytes && found ? (*env)->NewObject(env, type, ctor, name, bytes, (jboolean)propagate) : NULL;
+      if (entry) (*env)->SetObjectArrayElement(env, result, (jsize)i, entry);
+      dds_free(value);
+      (*env)->PopLocalFrame(env, NULL);
+    }
+    dds_free(names[i]);
+  }
+  dds_free(names);
+  if (type) (*env)->DeleteLocalRef(env, type);
+  return result;
+}
+static jobject snapshot_extensions(JNIEnv *env, const dds_qos_t *qos) {
+  if (!qos || (*env)->PushLocalFrame(env, 12) < 0) return NULL;
+  jobjectArray props = snapshot_properties(env, qos, false);
+  jobjectArray binary = !(*env)->ExceptionCheck(env) ? snapshot_properties(env, qos, true) : NULL;
+  char *name = NULL;
+  jbyteArray entity_name = !(*env)->ExceptionCheck(env) && dds_qget_entity_name(qos, &name) ? qos_byte_array(env, name, strlen(name)) : NULL;
+  dds_free(name);
+  uint32_t count = 0; char **names = NULL; jobjectArray psmx = NULL;
+  if (!(*env)->ExceptionCheck(env) && dds_qget_psmx_instances(qos, &count, &names)) {
+    jclass type = (*env)->FindClass(env, "[B");
+    if (type) psmx = (*env)->NewObjectArray(env, (jsize)count, type, NULL);
+    for (uint32_t i = 0; i < count; i++) {
+      if (psmx && !(*env)->ExceptionCheck(env)) {
+        jbyteArray value = qos_byte_array(env, names[i], strlen(names[i]));
+        if (value) { (*env)->SetObjectArrayElement(env, psmx, (jsize)i, value); (*env)->DeleteLocalRef(env, value); }
+      }
+      dds_free(names[i]);
+    }
+    dds_free(names);
+  }
+  jobject result = NULL;
+  if (!(*env)->ExceptionCheck(env)) {
+    jclass type = (*env)->FindClass(env, "org/eclipse/cyclonedds/internal/Native$Extensions");
+    jmethodID ctor = type ? (*env)->GetMethodID(env, type, "<init>",
+      "([Lorg/eclipse/cyclonedds/internal/Native$Property;[Lorg/eclipse/cyclonedds/internal/Native$Property;[B[[B)V") : NULL;
+    if (ctor) result = (*env)->NewObject(env, type, ctor, props, binary, entity_name, psmx);
+  }
+  return (*env)->PopLocalFrame(env, result);
+}
 static jobject snapshot_qos(JNIEnv *env, const dds_qos_t *qos) {
   if ((*env)->PushLocalFrame(env, 32) < 0) return NULL;
-  jlong v[33]; for (size_t i = 0; i < 33; i++) v[i] = -1;
+  jlong v[QOS_VALUE_COUNT]; for (size_t i = 0; i < QOS_VALUE_COUNT; i++) v[i] = -1;
   v[15] = v[32] = 0;
   if (qos) {
     dds_reliability_kind_t reliability; dds_duration_t duration;
@@ -405,18 +557,28 @@ static jobject snapshot_qos(JNIEnv *env, const dds_qos_t *qos) {
     dds_duration_t disposed;
     if (dds_qget_reader_data_lifecycle(qos, &duration, &disposed)) { v[25] = duration; v[26] = disposed; }
     dds_type_consistency_kind_t consistency; bool x, y, z, w;
-    if (dds_qget_type_consistency(qos, &consistency, &x, &y, &z, &w, &flag)) v[27] = consistency;
+    if (dds_qget_type_consistency(qos, &consistency, &x, &y, &z, &w, &flag)) {
+      v[27] = consistency; v[35] = x; v[36] = y; v[37] = z; v[38] = w; v[39] = flag;
+    }
+    dds_ignorelocal_kind_t ignore;
+    if (dds_qget_ignorelocal(qos, &ignore)) v[33] = ignore;
+    if (dds_qget_writer_batching(qos, &flag)) v[34] = flag;
     uint32_t count; dds_data_representation_id_t *ids;
     if (dds_qget_data_representation(qos, &count, &ids)) {
-      v[28] = 0; for (uint32_t i = 0; i < count; i++) if (ids[i] == 0 || ids[i] == 2) v[28] |= (jlong)1 << ids[i];
+      v[28] = 0;
+      for (uint32_t i = 0; i < count; i++) {
+        if (ids[i] >= 0 && ids[i] <= 2) v[28] |= (jlong)1 << ids[i];
+        else fail(env, "Unknown QoS data representation", DDS_RETCODE_UNSUPPORTED);
+      }
       dds_free(ids);
     }
     dds_presentation_access_scope_kind_t scope;
     if (dds_qget_presentation(qos, &scope, &x, &y)) { v[29] = scope; v[30] = x; v[31] = y; }
   }
-  jlongArray values = (*env)->NewLongArray(env, 33);
+  if ((*env)->ExceptionCheck(env)) { (*env)->PopLocalFrame(env, NULL); return NULL; }
+  jlongArray values = (*env)->NewLongArray(env, QOS_VALUE_COUNT);
   if (!values) { (*env)->PopLocalFrame(env, NULL); return NULL; }
-  (*env)->SetLongArrayRegion(env, values, 0, 33, v);
+  (*env)->SetLongArrayRegion(env, values, 0, QOS_VALUE_COUNT, v);
   jclass bytes_type = (*env)->FindClass(env, "[B");
   jobjectArray data = bytes_type ? (*env)->NewObjectArray(env, 3, bytes_type, NULL) : NULL;
   if (!data) { (*env)->PopLocalFrame(env, NULL); return NULL; }
@@ -446,11 +608,68 @@ static jobject snapshot_qos(JNIEnv *env, const dds_qos_t *qos) {
   }
   jobject result = NULL;
   if (!(*env)->ExceptionCheck(env)) {
+    jobject extensions = snapshot_extensions(env, qos);
+    if ((*env)->ExceptionCheck(env)) { (*env)->PopLocalFrame(env, NULL); return NULL; }
     jclass type = (*env)->FindClass(env, "org/eclipse/cyclonedds/internal/Native$Qos");
-    jmethodID ctor = type ? (*env)->GetMethodID(env, type, "<init>", "([J[[B[Ljava/lang/String;)V") : NULL;
-    if (ctor) result = (*env)->NewObject(env, type, ctor, values, data, partitions);
+    jmethodID ctor = type ? (*env)->GetMethodID(env, type, "<init>", "([J[[B[Ljava/lang/String;Lorg/eclipse/cyclonedds/internal/Native$Extensions;)V") : NULL;
+    if (ctor) result = (*env)->NewObject(env, type, ctor, values, data, partitions, extensions);
   }
   return (*env)->PopLocalFrame(env, result);
+}
+JNIEXPORT jobject JNICALL JNI_METHOD(roundTripQos)(JNIEnv *env, jclass cls, jobject configuration) {
+  UNUSED_CLASS;
+  dds_qos_t *qos = configured_qos(env, configuration);
+  if (!qos) return NULL;
+  jobject result = snapshot_qos(env, qos);
+  dds_delete_qos(qos);
+  return result;
+}
+#ifdef DDS_HAS_QOS_PROVIDER
+static char *qos_java_text(JNIEnv *env, jstring text) {
+  if (!text) { fail(env, "Null profile text", DDS_RETCODE_BAD_PARAMETER); return NULL; }
+  jclass type = (*env)->FindClass(env, "java/lang/String");
+  jmethodID method = type ? (*env)->GetMethodID(env, type, "getBytes", "(Ljava/lang/String;)[B") : NULL;
+  jstring encoding = method ? (*env)->NewStringUTF(env, "UTF-8") : NULL;
+  jbyteArray bytes = encoding ? (*env)->CallObjectMethod(env, text, method, encoding) : NULL;
+  char *value = !(*env)->ExceptionCheck(env) && bytes ? qos_text(env, bytes) : NULL;
+  if (bytes) (*env)->DeleteLocalRef(env, bytes);
+  if (encoding) (*env)->DeleteLocalRef(env, encoding);
+  if (type) (*env)->DeleteLocalRef(env, type);
+  return value;
+}
+#endif
+JNIEXPORT jboolean JNICALL JNI_METHOD(hasQosProvider)(JNIEnv *env, jclass cls) {
+  (void)env; UNUSED_CLASS;
+#ifdef DDS_HAS_QOS_PROVIDER
+  return JNI_TRUE;
+#else
+  return JNI_FALSE;
+#endif
+}
+JNIEXPORT jobject JNICALL JNI_METHOD(profileQos)(JNIEnv *env, jclass cls, jstring uri, jstring key, jint kind) {
+  UNUSED_CLASS;
+#ifdef DDS_HAS_QOS_PROVIDER
+  if (kind < 0 || kind > 5) { fail(env, "XML QoS entity kind", DDS_RETCODE_BAD_PARAMETER); return NULL; }
+  char *path = qos_java_text(env, uri);
+  char *name = !(*env)->ExceptionCheck(env) ? qos_java_text(env, key) : NULL;
+  dds_qos_provider_t *provider = NULL; const dds_qos_t *qos = NULL; jobject result = NULL;
+  if (path && name) {
+    dds_return_t rc = dds_create_qos_provider(path, &provider);
+    if (rc >= 0) rc = dds_qos_provider_get_qos(provider, (dds_qos_kind_t)kind, name, &qos);
+    if (rc < 0) fail(env, "XML QoS profile", rc); else result = snapshot_qos(env, qos);
+  }
+  if (provider) dds_delete_qos_provider(provider);
+  free(path); free(name);
+  return result;
+#else
+  (void)uri; (void)key; (void)kind;
+  fail(env, "Cyclone DDS built without QoS-provider support", DDS_RETCODE_UNSUPPORTED); return NULL;
+#endif
+}
+JNIEXPORT void JNICALL JNI_METHOD(flush)(JNIEnv *env, jclass cls, jint writer) {
+  UNUSED_CLASS;
+  dds_return_t rc = dds_write_flush(writer);
+  if (rc < 0) fail(env, "dds_write_flush", rc);
 }
 JNIEXPORT jobject JNICALL JNI_METHOD(getQos)(JNIEnv *env, jclass cls, jint entity) {
   UNUSED_CLASS;

@@ -109,8 +109,9 @@ Type consistency and representation
 The unmodified OMG Java API predates the modern two-kind XTypes policy.
 ``withExactTypeTypeConsistency()`` maps to ``DISALLOW_TYPE_COERCION``;
 ``withAssignableTypeConsistency()`` maps to ``ALLOW_TYPE_COERCION``. Validation
-requires type metadata. Assignable mode checks member names, permits bounds to
-differ and allows widening. The integration tests verify a newer appendable
+requires type metadata. The default assignable mode checks member names, permits bounds to
+differ and allows widening. Cyclone-specific type-consistency options below can
+override those defaults. The integration tests verify a newer appendable
 writer schema matching an older reader in assignable mode, while the exact-type
 reader rejects it and reports ``TypeConsistencyEnforcement`` in its status.
 The old ``EXACT_NAME`` and ``DECLARED`` kinds have no faithful core equivalent
@@ -171,3 +172,111 @@ liveliness loss/recovery, and exact/assignable schema matching. An independent C
 participant verifies binary user/group/topic discovery data and enabled-entity
 metadata updates. Rejected updates leave Java QoS unchanged. These tests do not
 establish every DDS profile or all policy combinations.
+
+
+Cyclone extension policies
+--------------------------
+
+The normative OMG API stays unchanged. Additional policies are defined in
+``org.eclipse.cyclonedds.core.policy`` and created with
+``org.eclipse.cyclonedds.omg.CyclonePolicyFactory``. They use the same immutable
+``withPolicy`` / ``withPolicies`` operations as standard policies:
+
+.. code-block:: java
+
+   var cyclone = org.eclipse.cyclonedds.omg.CyclonePolicyFactory.getPolicyFactory(environment);
+   var participantQos = factory.getDefaultParticipantQos().withPolicies(
+       cyclone.EntityName().withName("vehicle gateway"),
+       cyclone.Property().withValue("application", "telemetry", true),
+       cyclone.BinaryProperty().withValue("version", new byte[]{1, 0, 2}, false));
+   var participant = factory.createParticipant(0, participantQos, null, null);
+
+``Property`` and ``BinaryProperty`` contain immutable maps of names to values
+and their ``propagate`` flags. Calling ``withValue`` adds or replaces a named
+entry; ``without`` returns a new policy without it. Binary input/output is copied.
+Names and string values support UTF-8, including supplementary characters; NUL
+and malformed surrogate sequences are rejected. ``propagate=false`` keeps the
+property local. Properties apply to participants, readers and writers, matching
+the native core's supported entity scopes. They are distinct from ``UserData``.
+The pinned core treats properties and entity names as immutable after creation.
+
+``EntityName`` applies to participants, topics, publishers, subscribers, readers
+and writers. ``IgnoreLocal`` applies to participants, publishers, subscribers,
+readers and writers; its kinds are ``NOTHING``, ``PARTICIPANT`` and ``PROCESS``.
+For example, a writer configured with
+``cyclone.IgnoreLocal().withKind(IgnoreLocal.Kind.PARTICIPANT)`` does not match
+readers from the same participant, but can match a remote C or Java participant.
+
+``WriterBatching`` applies to writers:
+
+.. code-block:: java
+
+   var qos = publisher.getDefaultDataWriterQos().withPolicy(
+       cyclone.WriterBatching().withEnabled(true));
+   var writer = publisher.createDataWriter(topic, qos);
+   writer.write(sample);
+   org.eclipse.cyclonedds.omg.CycloneEntities.flush(writer);
+
+The flush operation forwards to ``dds_write_flush`` to send buffered RTPS
+messages. Batching can improve throughput at the cost of latency.
+
+``PsmxInstances`` applies to readers and writers. ``withNames(List.of())``
+explicitly disables PSMX on an endpoint. A nonempty list selects already
+configured native plugin instances. Unknown instance names are rejected by the
+core when using this PSMX-capable type support. The byte-oriented type support accepts serialized PSMX data and keys and copies
+them into validated CDR buffers. Raw C-layout PSMX samples are rejected. This
+policy does not install a plugin or provide Java sample loans.
+
+To inspect the effective native policy, use
+``CycloneEntities.getNativePolicy(entity, Property.class)`` (or
+``getNativeQos(entity)`` for the complete view). An absent policy is returned as
+``null``. For built-in or matched-endpoint discovery snapshots, use
+``CyclonePolicyFactory.getDiscoveredPolicy(data, Property.class)`` or
+``EntityName.class``; these helpers also work on cloned snapshots.
+
+Modern type consistency and representation matching
+---------------------------------------------------
+
+``cyclone.TypeConsistency()`` extends the standard policy with immutable
+``withIgnoreSequenceBounds``, ``withIgnoreStringBounds``, ``withIgnoreMemberNames``,
+``withPreventTypeWidening`` and ``withForceTypeValidation`` options. All five
+flags are forwarded and retained in native/discovery snapshots. The defaults
+remain true, true, false, false and true respectively.
+
+``DataRepresentation.compareTo`` provides a deterministic lexicographic ordering
+of the representation-ID lists. Disjoint sets have no DDS request/offer ordering:
+``requestedOfferedContract().compareTo(...)`` rejects that case instead of
+reporting incompatible XCDR1-only and XCDR2-only policies as equal. For directional
+writer/reader compatibility, use
+``CyclonePolicyFactory.isRepresentationCompatible(writerPolicy, readerPolicy)``.
+The offered writer policy must select exactly one representation.
+
+XML QoS profiles
+-----------------
+
+The standard ``QosProvider`` now uses Cyclone's native XML profile parser. It
+accepts inline XML, a local file path or a ``file:`` URI, including UTF-8 paths.
+File contents are read when the provider is constructed; returned QoS views own
+copied policy values. Select profiles and optional named entity QoS as follows:
+
+.. code-block:: java
+
+   var profiles = org.omg.dds.core.QosProvider.newQosProvider(
+       "profiles.xml", "MyLibrary::MyProfile", environment);
+   var writerQos = profiles.getDataWriterQos("ReliableWriter");
+   var participantQos = profiles.getDomainParticipantQos();
+
+An ID containing ``::`` selects a fully qualified key instead of appending the
+ID to the provider's default library/profile. The native parser resolves profile
+inheritance. Participant, topic, publisher, subscriber, reader and writer QoS are
+supported. Factory QoS has no native profile entity kind and is rejected.
+The core must be built with ``DDS_HAS_QOS_PROVIDER``. Unsupported core features
+in a loaded profile remain subject to the same validation when applied to an
+entity; loading a profile does not emulate disabled entities, coherent access,
+finite auto-purge timers or XML data serialization.
+
+``qos-extensions`` verifies native values and independent C discovery, including
+private/public properties, binary values, UTF-8 names, wildcard partitions,
+IgnoreLocal matching, batching/flush and PSMX selection validation. ``qos-xml``
+checks all six native entity kinds, inheritance, named profiles, file/URI loading,
+errors and an actual Java exchange using profile-derived QoS.

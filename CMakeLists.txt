@@ -40,7 +40,7 @@ install_jar(idl4-java-api DESTINATION share/java)
 file(GLOB_RECURSE JAVA_SOURCES CONFIGURE_DEPENDS src/ddsjava/*.java)
 list(FILTER JAVA_SOURCES EXCLUDE REGEX "/org/omg/type/")
 add_jar(org.eclipse.cyclonedds SOURCES ${JAVA_SOURCES} INCLUDE_JARS omg-dds-api idl4-java-api
-  RESOURCES NAMESPACE META-INF LICENSE THIRD_PARTY_NOTICES.md
+  RESOURCES NAMESPACE META-INF LICENSE
   OUTPUT_NAME org.eclipse.cyclonedds)
 install_jar(org.eclipse.cyclonedds DESTINATION share/java)
 string(TOLOWER "${CMAKE_SYSTEM_NAME}" JAVA_NATIVE_OS)
@@ -78,7 +78,7 @@ add_custom_command(OUTPUT "${BUNDLED_RUNTIME_JAR}"
   VERBATIM)
 add_custom_target(bundled-runtime ALL DEPENDS "${BUNDLED_RUNTIME_JAR}")
 install(FILES "${BUNDLED_RUNTIME_JAR}" DESTINATION share/java)
-install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION share/doc/org.eclipse.cyclonedds)
+install(FILES LICENSE DESTINATION share/doc/org.eclipse.cyclonedds)
 install(FILES README.md DESTINATION share/doc/org.eclipse.cyclonedds)
 install(DIRECTORY docs/ DESTINATION share/doc/org.eclipse.cyclonedds/docs)
 install(FILES third_party/omg-dds/LICENSE third_party/omg-dds/NOTICE DESTINATION share/doc/org.eclipse.cyclonedds/omg-dds)
@@ -284,6 +284,16 @@ if(BUILD_TESTING)
     ENVIRONMENT "CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address=\"127.0.0.1\"/></Interfaces><AllowMulticast>false</AllowMulticast></General><Discovery><ParticipantIndex>auto</ParticipantIndex><EnableTopicDiscoveryEndpoints>true</EnableTopicDiscoveryEndpoints><Peers><Peer Address=\"127.0.0.1\"/></Peers></Discovery></Domain></CycloneDDS>")
   set_tests_properties(qos-interop PROPERTIES TIMEOUT 30
     ENVIRONMENT "CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address=\"127.0.0.1\"/></Interfaces><AllowMulticast>false</AllowMulticast></General><Discovery><ParticipantIndex>auto</ParticipantIndex><Peers><Peer Address=\"127.0.0.1\"/></Peers></Discovery></Domain></CycloneDDS>")
+  foreach(qos_case extensions xml)
+    add_test(NAME "qos-${qos_case}" COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni
+      "-Dorg.omg.dds.serviceClassName=org.eclipse.cyclonedds.omg.CycloneServiceEnvironment"
+      "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>"
+      -cp "${TEST_CP}" org.eclipse.cyclonedds.omg.QosExtensionsTest "${qos_case}" "$<TARGET_FILE:qos-extensions-peer>")
+    set_tests_properties("qos-${qos_case}" PROPERTIES TIMEOUT 40)
+  endforeach()
+  set_tests_properties(qos-xml PROPERTIES SKIP_REGULAR_EXPRESSION "XML QoS provider disabled in this core build")
+  get_test_property(qos-interop ENVIRONMENT QOS_TEST_ENVIRONMENT)
+  set_tests_properties(qos-extensions PROPERTIES ENVIRONMENT "${QOS_TEST_ENVIRONMENT}")
   foreach(operation_test Operations Listener QosBehavior)
     string(TOLOWER "${operation_test}" operation_name)
     add_test(NAME "omg-${operation_name}" COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni

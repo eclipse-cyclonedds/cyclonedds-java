@@ -75,6 +75,6 @@ mapping supports those forms.
 
 Full test parity is not established. Unreviewed definitions remain visible;
 related Java tests are not automatically counted as equivalent. Runtime dynamic
-types, XML QoS providers, bitmasks, statistics and shared-memory loans still have feature
-gaps. Rejection tests verify diagnostics and do not count as successful feature
+types, participant-factory XML QoS profiles, bitmasks, statistics and shared-memory
+loans still have feature gaps. Rejection tests verify diagnostics and do not count as successful feature
 coverage. See :doc:`roadmap` for implementation limitations.

@@ -44,6 +44,31 @@ final class Entities {
             throw new IllegalArgumentException("Foreign DDS entity");
         return (State) Proxy.getInvocationHandler(entity);
     }
+    static EntityQos<?> nativeQos(Object entity) {
+        State s = state(entity);
+        synchronized (s.root) {
+            s.requireOpen();
+            Class<? extends EntityQos<?>> api = switch (s.kind) {
+                case PARTICIPANT -> DomainParticipantQos.class;
+                case TOPIC, FILTER_TOPIC -> TopicQos.class;
+                case PUBLISHER -> PublisherQos.class;
+                case SUBSCRIBER -> SubscriberQos.class;
+                case WRITER -> DataWriterQos.class;
+                case READER -> DataReaderQos.class;
+            };
+            try { return Discovery.qos(s.env, api, Native.getQos(s.handle)); }
+            catch (DdsException error) { throw Errors.unchecked(s.env, error); }
+        }
+    }
+    static void flush(Object entity) {
+        State s = state(entity);
+        synchronized (s.root) {
+            s.requireOpen();
+            if (s.kind != Kind.WRITER) throw new IllegalArgumentException("Expected a DataWriter");
+            try { Native.flush(s.handle); }
+            catch (DdsException error) { throw Errors.unchecked(s.env, error); }
+        }
+    }
     static boolean isOpen(Object entity) { State s = state(entity); synchronized (s.root) { return s.handle != 0 && s.root.handle != 0; } }
     static DomainParticipant participant(ServiceEnvironment env, int domain, DomainParticipantQos qos, Object listener, Object statuses) {
         State s;

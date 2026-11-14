@@ -17,7 +17,16 @@ package org.eclipse.cyclonedds.internal;
 public final class Native {
     static { NativeLoader.load(); }
     private Native() {}
-    public record Qos(long[] values, byte[][] data, String[] partitions) {}
+    public static final int QOS_VALUE_COUNT = 40;
+    public record Property(byte[] name, byte[] value, boolean propagate) {}
+    public record Extensions(Property[] properties, Property[] binaryProperties, byte[] entityName, byte[][] psmxInstances) {}
+    public record Qos(long[] values, byte[][] data, String[] partitions, Extensions extensions) {
+        public Qos(long[] values, byte[][] data, String[] partitions) { this(values, data, partitions, null); }
+    }
+    public static native boolean hasQosProvider();
+    public static native Qos profileQos(String uri, String key, int kind);
+    /** Round-trip a configuration through the native QoS object, without creating an entity. */
+    public static native Qos roundTripQos(Qos qos);
     public static native int participant(int domain);
     public static native int participantConfigured(int domain, Qos qos);
     public static int topic(int participant, String name, String typeName, boolean hasKey, byte[] typeInformation, byte[] typeMapping) {
@@ -45,6 +54,7 @@ public final class Native {
     public static native void dispose(int writer, long instance, boolean unregister, long timestamp);
     public static native void waitForAcks(int entity, long timeoutNanos);
     public static native void delete(int entity);
+    public static native void flush(int writer);
     public static native void write(int writer, byte[] cdr);
     public static native void writeAt(int writer, byte[] cdr, long timestamp);
     public static native WireSample[] take(int reader, int maxSamples);

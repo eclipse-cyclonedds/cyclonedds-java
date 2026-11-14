@@ -58,7 +58,7 @@ public final class CycloneServiceEnvironment extends ServiceEnvironment {
         public DynamicDataFactory getDynamicDataFactory() { throw Policies.unsupported("DynamicDataFactory"); }
         public GuardCondition newGuardCondition() { return new Conditions.Guard(CycloneServiceEnvironment.this); }
         public WaitSet newWaitSet() { return new BlockingWaitSet(CycloneServiceEnvironment.this); }
-        public QosProvider newQosProvider(String uri, String profile) { throw Policies.unsupported("XML QoS profiles"); }
+        public QosProvider newQosProvider(String uri, String profile) { return new XmlQosProvider(CycloneServiceEnvironment.this, uri, profile); }
         public KeyedString newKeyedString() { throw Policies.unsupported("KeyedString"); }
         public KeyedBytes newKeyedBytes() { throw Policies.unsupported("KeyedBytes"); }
     }

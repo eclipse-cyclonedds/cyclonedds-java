@@ -23,7 +23,7 @@ add_custom_command(OUTPUT "${BUNDLED_IDLC_JAR}"
   DEPENDS idlc-launcher idljava CycloneDDS::idlc CycloneDDS::idl CycloneDDS::ddsc
     "$<TARGET_PROPERTY:idlc-launcher,JAR_FILE>" "$<TARGET_FILE:idljava>"
     "${PROJECT_SOURCE_DIR}/cmake/BundleIdlc.cmake" "${PROJECT_SOURCE_DIR}/third_party/idlc/LICENSE-mcpp"
-    "${PROJECT_SOURCE_DIR}/LICENSE" "${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+    "${PROJECT_SOURCE_DIR}/LICENSE"
     "${PROJECT_SOURCE_DIR}/third_party/cyclonedds/LICENSE" "${PROJECT_SOURCE_DIR}/third_party/cyclonedds/NOTICE.md"
   VERBATIM)
 add_custom_target(bundled-idlc ALL DEPENDS "${BUNDLED_IDLC_JAR}")

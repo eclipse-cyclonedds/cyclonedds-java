@@ -18,6 +18,9 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import org.omg.dds.core.*;
 import org.omg.dds.core.policy.*;
+import org.eclipse.cyclonedds.core.policy.*;
+import org.eclipse.cyclonedds.internal.Native;
+import java.nio.charset.StandardCharsets;
 
 /** Immutable supported policies and QoS views implementing the unmodified OMG interfaces. */
 final class Policies {
@@ -104,6 +107,7 @@ final class Policies {
             values.put(History.class, new HistoryPolicy(env, History.Kind.KEEP_LAST, 1));
         }
         for (Class<?> policy : ExtraPolicies.SUPPORTED) {
+            if (ExtraPolicies.EXTENSIONS.contains(policy)) continue;
             Class<?> applies = name.equals("TopicQos") ? QosPolicy.ForTopic.class
                 : name.equals("DataWriterQos") ? QosPolicy.ForDataWriter.class
                 : name.equals("DataReaderQos") ? QosPolicy.ForDataReader.class
@@ -130,7 +134,7 @@ final class Policies {
         var filter = (TimeBasedFilter) qos.get(TimeBasedFilter.class);
         var lifecycle = (WriterDataLifecycle) qos.get(WriterDataLifecycle.class);
         var service = (DurabilityService) qos.get(DurabilityService.class);
-        long[] values = new long[33]; Arrays.fill(values, -1);
+        long[] values = new long[Native.QOS_VALUE_COUNT]; Arrays.fill(values, -1);
         if (r != null) {
         long[] endpoint = new long[]{r.getKind().ordinal(), r.getMaxBlockingTime().getDuration(TimeUnit.NANOSECONDS),
             h.getKind() == History.Kind.KEEP_ALL ? 0 : h.getDepth(), d.getKind().ordinal(),
@@ -163,10 +167,44 @@ final class Policies {
         values[30] = presentation != null && presentation.isCoherentAccess() ? 1 : 0;
         values[31] = presentation != null && presentation.isOrderedAccess() ? 1 : 0;
         values[32] = priority == null ? 0 : 1;
+        IgnoreLocal ignore = (IgnoreLocal) qos.get(IgnoreLocal.class);
+        WriterBatching batching = (WriterBatching) qos.get(WriterBatching.class);
+        values[33] = ignore == null ? -1 : ignore.getKind().ordinal();
+        values[34] = batching == null ? -1 : batching.isEnabled() ? 1 : 0;
+        TypeConsistency options = consistency instanceof TypeConsistency tc ? tc : null;
+        values[35] = options == null || options.isIgnoreSequenceBounds() ? 1 : 0;
+        values[36] = options == null || options.isIgnoreStringBounds() ? 1 : 0;
+        values[37] = options != null && options.isIgnoreMemberNames() ? 1 : 0;
+        values[38] = options != null && options.isPreventTypeWidening() ? 1 : 0;
+        values[39] = options == null || options.isForceTypeValidation() ? 1 : 0;
+        Property properties = (Property) qos.get(Property.class);
+        BinaryProperty binary = (BinaryProperty) qos.get(BinaryProperty.class);
+        EntityName name = (EntityName) qos.get(EntityName.class);
+        PsmxInstances psmx = (PsmxInstances) qos.get(PsmxInstances.class);
+        Native.Extensions extensions = new Native.Extensions(
+            properties == null ? null : properties.getValue().entrySet().stream().map(e ->
+                new Native.Property(utf8(e.getKey()), utf8(e.getValue().value()), e.getValue().propagate())).toArray(Native.Property[]::new),
+            binary == null ? null : binary.getValue().entrySet().stream().map(e ->
+                new Native.Property(utf8(e.getKey()), e.getValue().value(), e.getValue().propagate())).toArray(Native.Property[]::new),
+            name == null ? null : utf8(name.getName()),
+            psmx == null ? null : psmx.getNames().stream().map(Policies::utf8).toArray(byte[][]::new));
         UserData user = (UserData) qos.get(UserData.class); GroupData group = (GroupData) qos.get(GroupData.class); TopicData topic = (TopicData) qos.get(TopicData.class);
         return new org.eclipse.cyclonedds.internal.Native.Qos(values, new byte[][]{
             user == null ? null : user.getValue(), group == null ? null : group.getValue(), topic == null ? null : topic.getValue()},
-            qos.get(Partition.class) == null ? null : partitions(qos));
+            qos.get(Partition.class) == null ? null : partitions(qos), extensions);
+    }
+    private static byte[] utf8(String value) { return PolicyText.require(value).getBytes(StandardCharsets.UTF_8); }
+    static Class<?> scope(Class<?> type) {
+        return switch (type.getSimpleName()) {
+            case "TopicQos" -> QosPolicy.ForTopic.class;
+            case "DataWriterQos" -> QosPolicy.ForDataWriter.class;
+            case "DataReaderQos" -> QosPolicy.ForDataReader.class;
+            case "PublisherQos" -> QosPolicy.ForPublisher.class;
+            case "SubscriberQos" -> QosPolicy.ForSubscriber.class;
+            case "DomainParticipantQos" -> QosPolicy.ForDomainParticipant.class;
+            case "DomainParticipantFactoryQos" -> QosPolicy.ForDomainParticipantFactory.class;
+            default -> throw new IllegalArgumentException("Unknown QoS type");
+        };
     }
     static void validate(EntityQos<?> qos) {
         ReaderDataLifecycle readerLife = (ReaderDataLifecycle) qos.get(ReaderDataLifecycle.class);
@@ -202,7 +240,8 @@ final class Policies {
     static List<String> changedPolicies(EntityQos<?> before, EntityQos<?> after) {
         QosView a = (QosView) Proxy.getInvocationHandler(before);
         QosView b = (QosView) Proxy.getInvocationHandler(after);
-        return a.values.keySet().stream().filter(key -> !Objects.equals(a.values.get(key), b.values.get(key)))
+        Set<Class<?>> keys = new HashSet<>(a.values.keySet()); keys.addAll(b.values.keySet());
+        return keys.stream().filter(key -> !Objects.equals(a.values.get(key), b.values.get(key)))
             .map(Class::getSimpleName).sorted().toList();
     }
     static void requireOwned(ServiceEnvironment env, Object qos) {
@@ -235,7 +274,7 @@ final class Policies {
                         Class<?> key = policy instanceof Reliability ? Reliability.class : policy instanceof History ? History.class : null;
                         if (key == null) for (Class<?> candidate : ExtraPolicies.SUPPORTED)
                             if (candidate.isInstance(policy)) { key = candidate; break; }
-                        if (key == null || !changed.containsKey(key)) throw unsupported("Policy for " + type.getSimpleName());
+                        if (key == null || !scope(type).isAssignableFrom(key)) throw unsupported("Policy for " + type.getSimpleName());
                         changed.put(key, policy);
                     }
                     return view(env, type, changed);

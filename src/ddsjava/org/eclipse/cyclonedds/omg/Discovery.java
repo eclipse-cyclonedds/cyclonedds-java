@@ -21,6 +21,8 @@ import org.eclipse.cyclonedds.internal.Native;
 import org.omg.dds.core.*;
 import org.omg.dds.core.policy.*;
 import org.omg.dds.topic.*;
+import org.eclipse.cyclonedds.core.policy.*;
+import java.nio.charset.StandardCharsets;
 
 /** Owned implementations of the normative built-in discovery data interfaces. */
 final class Discovery {
@@ -54,7 +56,7 @@ final class Discovery {
         return value;
     }
     static Object empty(ServiceEnvironment env, int kind) {
-        long[] values = new long[33]; Arrays.fill(values, -1);
+        long[] values = new long[Native.QOS_VALUE_COUNT]; Arrays.fill(values, -1);
         return data(env, new DiscoveryData(kind, new int[4], new int[4], "", "", new Native.Qos(values, new byte[3][], null), null));
     }
     static Object data(ServiceEnvironment env, DiscoveryData data) {
@@ -72,13 +74,14 @@ final class Discovery {
                 : api == History.class ? new Policies.Factory(env).History() : (QosPolicy)ExtraPolicies.create(env, api);
             values.put(method.getName(), policy);
         }
+        values.put("cyclonePolicies", Map.copyOf(policies));
         return new Snapshot(env, TYPES.get(data.kind()-1), values).proxy(values);
     }
     private static Duration duration(ServiceEnvironment env, long nanos) { return new Values.DdsDuration(env, nanos, TimeUnit.NANOSECONDS); }
     static <T extends EntityQos<?>> T qos(ServiceEnvironment env, Class<T> api, Native.Qos snapshot) {
-        T defaults = Policies.defaults(env, api, false);
+        T defaults = Policies.defaults(env, api, api == org.omg.dds.pub.DataWriterQos.class);
         Map<Class<?>, QosPolicy> values = new LinkedHashMap<>(defaults);
-        policies(env, snapshot).forEach((key, value) -> { if (values.containsKey(key)) values.put(key, value); });
+        policies(env, snapshot).forEach((key, value) -> { if (Policies.scope(api).isAssignableFrom(key)) values.put(key, value); });
         return Policies.view(env, api, values);
     }
     private static Map<Class<?>, QosPolicy> policies(ServiceEnvironment env, Native.Qos qos) {
@@ -93,6 +96,7 @@ final class Discovery {
         if (v[9] >= 0) put(env, result, Liveliness.class, Map.of("Kind", Liveliness.Kind.values()[(int)v[9]], "LeaseDuration", duration(env, v[10])));
         if (v[11] >= 0) put(env, result, Ownership.class, Map.of("Kind", Ownership.Kind.values()[(int)v[11]]));
         if (v[15] == 1) put(env, result, OwnershipStrength.class, Map.of("Value", (int)v[12]));
+        if (v[14] >= 0) put(env, result, WriterDataLifecycle.class, Map.of("AutDisposeUnregisteredInstances", v[14] != 0));
         if (v[13] >= 0) put(env, result, TimeBasedFilter.class, Map.of("MinimumSeparation", duration(env, v[13])));
         if (v[16] >= 0) put(env, result, DurabilityService.class, Map.of("ServiceCleanupDelay", duration(env, v[16]),
             "HistoryKind", History.Kind.values()[(int)v[17]], "HistoryDepth", (int)v[18], "MaxSamples", (int)v[19], "MaxInstances", (int)v[20], "MaxSamplesPerInstance", (int)v[21]));
@@ -100,16 +104,42 @@ final class Discovery {
         if (v[23] >= 0) put(env, result, LatencyBudget.class, Map.of("Duration", duration(env, v[23])));
         if (v[32] == 1) put(env, result, TransportPriority.class, Map.of("Value", (int)v[24]));
         if (v[25] >= 0) put(env, result, ReaderDataLifecycle.class, Map.of("AutoPurgeNoWriterSamplesDelay", duration(env, v[25]), "AutoPurgeDisposedSamplesDelay", duration(env, v[26])));
-        if (v[27] >= 0) put(env, result, TypeConsistencyEnforcement.class, Map.of("Kind", v[27] == 0 ? TypeConsistencyEnforcement.Kind.EXACT_TYPE_TYPE_CONSISTENCY : TypeConsistencyEnforcement.Kind.ASSIGNABLE_TYPE_CONSISTENCY));
+        if (v[27] >= 0) put(env, result, TypeConsistencyEnforcement.class, Map.of("Kind", v[27] == 0 ? TypeConsistencyEnforcement.Kind.EXACT_TYPE_TYPE_CONSISTENCY : TypeConsistencyEnforcement.Kind.ASSIGNABLE_TYPE_CONSISTENCY,
+            "IgnoreSequenceBounds", v[35] != 0, "IgnoreStringBounds", v[36] != 0, "IgnoreMemberNames", v[37] == 1,
+            "PreventTypeWidening", v[38] == 1, "ForceTypeValidation", v[39] != 0));
         if (v[28] > 0) {
-            List<Short> ids = new ArrayList<>(); if ((v[28] & 1) != 0) ids.add((short)0); if ((v[28] & 4) != 0) ids.add((short)2);
+            List<Short> ids = new ArrayList<>();
+            for (short id = 0; id <= 2; id++) if ((v[28] & (1 << id)) != 0) ids.add(id);
             put(env, result, DataRepresentation.class, Map.of("Value", List.copyOf(ids)));
         }
         if (v[29] >= 0) put(env, result, Presentation.class, Map.of("AccessScope", Presentation.AccessScopeKind.values()[(int)v[29]], "CoherentAccess", v[30] != 0, "OrderedAccess", v[31] != 0));
         if (qos.partitions() != null) put(env, result, Partition.class, Map.of("Name", Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(qos.partitions())))));
         Class<?>[] binary = {UserData.class, GroupData.class, TopicData.class};
         for (int i = 0; i < binary.length; i++) if (qos.data()[i] != null) put(env, result, binary[i], Map.of("Value", qos.data()[i].clone()));
+        if (v[33] >= 0) put(env, result, IgnoreLocal.class, Map.of("Kind", IgnoreLocal.Kind.values()[(int)v[33]]));
+        if (v[34] >= 0) put(env, result, WriterBatching.class, Map.of("Enabled", v[34] != 0));
+        Native.Extensions ext = qos.extensions();
+        if (ext != null) {
+            if (ext.entityName() != null) put(env, result, EntityName.class, Map.of("Name", text(ext.entityName())));
+            if (ext.psmxInstances() != null) put(env, result, PsmxInstances.class, Map.of("Names", Arrays.stream(ext.psmxInstances()).map(Discovery::text).toList()));
+            if (ext.properties() != null) {
+                Map<String, Property.Value> entries = new LinkedHashMap<>();
+                for (var entry : ext.properties()) entries.put(text(entry.name()), new Property.Value(text(entry.value()), entry.propagate()));
+                put(env, result, Property.class, Map.of("Value", Map.copyOf(entries)));
+            }
+            if (ext.binaryProperties() != null) {
+                Map<String, BinaryProperty.Value> entries = new LinkedHashMap<>();
+                for (var entry : ext.binaryProperties()) entries.put(text(entry.name()), new BinaryProperty.Value(entry.value(), entry.propagate()));
+                put(env, result, BinaryProperty.class, Map.of("Value", Map.copyOf(entries)));
+            }
+        }
         return result;
+    }
+    private static String text(byte[] value) { return new String(value, StandardCharsets.UTF_8); }
+    static <T extends QosPolicy> T policy(Object data, Class<T> type) {
+        if (!isData(data)) throw new IllegalArgumentException("Foreign discovery data");
+        Object all = ((Snapshot) Proxy.getInvocationHandler(data)).values.get("cyclonePolicies");
+        return all instanceof Map<?, ?> entries ? type.cast(entries.get(type)) : null;
     }
     private static void put(ServiceEnvironment env, Map<Class<?>, QosPolicy> values, Class<?> api, Map<String, Object> properties) {
         values.put(api, (QosPolicy)ExtraPolicies.proxy(env, api, properties));
@@ -131,6 +161,10 @@ final class Discovery {
                 for (Method getter : api.getMethods()) if (getter.getParameterCount() == 0 && getter.getName().startsWith("get") && !getter.getName().equals("getEnvironment")) {
                     Object value = getter.invoke(source);
                     if (value != null) replacement.put(getter.getName(), value instanceof BuiltinTopicKey key ? key.clone() : value);
+                }
+                if (isData(source)) {
+                    Object extensions = ((Snapshot)Proxy.getInvocationHandler(source)).values.get("cyclonePolicies");
+                    if (extensions != null) replacement.put("cyclonePolicies", extensions);
                 }
                 values = Map.copyOf(replacement); return null;
             }

@@ -78,7 +78,7 @@ The byte-oriented type support in
 implements DDSI ``sertype`` and ``serdata`` callbacks. After registration, its
 ``init_cdrstream_descriptor`` reconstructs a CDR descriptor from XTypes for validation
 and key extraction. Java follows this runtime approach in ``typesupport.c``\ ; the
-attribution is recorded in :download:`the third-party notices <../../THIRD_PARTY_NOTICES.md>`.
+original byte-oriented approach is credited above.
 
 Rust layering
 ^^^^^^^^^^^^^
