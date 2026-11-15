@@ -39,9 +39,13 @@ def main():
               f"-DANDROID_ABI={args.abi}", "-DANDROID_PLATFORM=android-28",
               "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
               "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384", "-DCMAKE_BUILD_TYPE=Release"]
+    # Core master enables LTO in Release. When its static LLVM archive is linked
+    # into JNI, NDK r27's LTO backend emits native x86 TLS resolver calls that
+    # Android API 28 does not provide. Keep the archive as ordinary PIC objects,
+    # so the Android compiler lowers TLS correctly for each target ABI.
     run("cmake", "-S", source, "-B", work / "core-build", *common,
         f"-DCMAKE_INSTALL_PREFIX={prefix}", "-DBUILD_SHARED_LIBS=OFF",
-        "-DCMAKE_POSITION_INDEPENDENT_CODE=ON", "-DBUILD_IDLC=OFF",
+        "-DCMAKE_POSITION_INDEPENDENT_CODE=ON", "-DENABLE_LTO=OFF", "-DBUILD_IDLC=OFF",
         "-DBUILD_TESTING=OFF", "-DBUILD_EXAMPLES=OFF", "-DBUILD_DDSPERF=OFF", "-DENABLE_SECURITY=OFF", "-DENABLE_SSL=OFF")
     run("cmake", "--build", work / "core-build", "--parallel", "4")
     run("cmake", "--install", work / "core-build")

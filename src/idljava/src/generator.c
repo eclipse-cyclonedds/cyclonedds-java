@@ -418,7 +418,10 @@ static void java_string(FILE *out, const char *str) {
 }
 static void emit_literal(FILE *out, const void *spec, const idl_literal_t *value) {
   const void *type = shape(spec).base;
-  if (idl_is_string(type) || idl_type(type) == IDL_WSTRING) {
+  /* Annotation member strings have IDL_ANNOTATION_MEMBER parents, which the
+     pinned core's idl_is_string debug assertion does not accept. The resolved
+     type discriminator also covers these valid annotation type nodes. */
+  if (idl_type(type) == IDL_STRING || idl_type(type) == IDL_WSTRING) {
     bool custom = strcmp(string_type(), "java.lang.String") != 0;
     if (custom) fprintf(out, "new %s(", string_type());
     java_string(out, value->value.str); if (custom) fputc(')', out); return;
