@@ -15,6 +15,7 @@ package org.eclipse.cyclonedds.omg;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 import org.eclipse.cyclonedds.core.DdsException;
 import org.eclipse.cyclonedds.core.cdr.CdrReader;
 import org.eclipse.cyclonedds.core.cdr.CdrWriter;
@@ -69,6 +70,58 @@ final class Entities {
             catch (DdsException error) { throw Errors.unchecked(s.env, error); }
         }
     }
+    static void onClose(Object entity, Runnable action) { state(entity).onClosed = action; }
+    @SuppressWarnings("unchecked")
+    static <T> CycloneQueryCondition<T> predicateCondition(DataReader<T> reader, java.util.function.Predicate<? super T> predicate,
+            Subscriber.DataState states) {
+        State s = state(reader);
+        synchronized (s.root) {
+            s.requireOpen();
+            if (s.builtinKind != 0) throw Policies.unsupported("Java predicates on built-in discovery data");
+            DataStates snapshot = states == null ? DataStates.any(s.env) : DataStates.snapshot(s.env, states);
+            try {
+                var result = new CycloneQueryCondition<>(s.env, reader, s.handle, snapshot,
+                    (CycloneTypeSupport<T>)s.type, predicate, s::closeReadCondition);
+                s.conditions.add(result); return result;
+            } catch (DdsException error) { throw Errors.unchecked(s.env, error); }
+        }
+    }
+    @SuppressWarnings("unchecked")
+    static <T> List<Sample<T>> accessCondition(DataReader<T> reader, CycloneQueryCondition<T> condition, int maximum, boolean take) {
+        State s = state(reader);
+        synchronized (s.root) {
+            s.requireOpen();
+            if (condition.getParent() != reader) throw new IllegalArgumentException("Condition belongs to another reader");
+            if (maximum < 0 || maximum > 65536) throw new IllegalArgumentException("Sample limit must be in [0, 65536]");
+            condition.throwIfFilterFailed();
+            try {
+                var result = new ArrayList<Sample<T>>();
+                var codec = ((CycloneTypeSupport<T>)s.type).codec();
+                if (maximum != 0) for (WireSample info : Native.select(condition.resource().handle(), maximum, take, condition.stateMask(), 0))
+                    result.add(new Samples.Data<>(s.env, codec, info.validData() ? codec.read(new CdrReader(info.cdr())) : null, info));
+                condition.throwIfFilterFailed();
+                return result;
+            } catch (DdsException error) { throw Errors.unchecked(s.env, error); }
+        }
+    }
+    static Throwable listenerException(Object entity) { return state(entity).dispatch.lastException(); }
+    static CompletableFuture<Boolean> waitDataAsync(Object reader) {
+        State s = state(reader);
+        synchronized (s.root) {
+            s.requireOpen();
+            if (s.kind != Kind.READER) throw new IllegalArgumentException("Expected a DataReader");
+            return s.waitDataAsync();
+        }
+    }
+    static void writeDispose(Object writer, Object value, long timestamp) {
+        State s = state(writer);
+        synchronized (s.root) {
+            s.requireOpen();
+            if (s.kind != Kind.WRITER) throw new IllegalArgumentException("Expected a DataWriter");
+            try { Native.writeDispose(s.handle, s.encode(value), timestamp); }
+            catch (DdsException error) { throw Errors.unchecked(s.env, error); }
+        }
+    }
     static boolean isOpen(Object entity) { State s = state(entity); synchronized (s.root) { return s.handle != 0 && s.root.handle != 0; } }
     static DomainParticipant participant(ServiceEnvironment env, int domain, DomainParticipantQos qos, Object listener, Object statuses) {
         State s;
@@ -105,12 +158,15 @@ final class Entities {
         final Map<Long, int[]> builtinKeys = new HashMap<>();
         MutableFilter contentFilter;
         long filterContext;
+        int asyncCondition;
+        final List<CompletableFuture<Boolean>> dataWaiters = new ArrayList<>();
         Object proxy;
+        Runnable onClosed = () -> {};
         volatile int handle;
         int domain, references = 1, loans;
         State(ServiceEnvironment env, Kind kind, State parent, int handle, EntityQos<?> qos, String name, CycloneTypeSupport<?> type) {
             this.env = env; this.kind = kind; this.parent = parent; this.root = parent == null ? this : parent.root;
-            this.dispatch = new ListenerDispatch(parent == null ? null : root.dispatch);
+            this.dispatch = new ListenerDispatch(this::onDataSignal);
             this.handle = handle; this.qos = qos; this.name = name; this.type = type;
             if (parent != null) parent.children.add(this);
         }
@@ -280,12 +336,55 @@ final class Entities {
                     targets[i] = new ListenerDispatch.Target(owner.listener, proxy, env, handle); mask |= 1 << i; break;
                 }
             }
+            if (kind == Kind.READER && !dataWaiters.isEmpty()) mask |= 1 << 8;
             dispatch.configure(targets);
             if (mask != 0 || listenerContext != 0) {
                 if (listenerContext == 0) listenerContext = Native.listenerCreate(dispatch);
                 Native.listenerSet(handle, listenerContext, mask);
             }
             for (State child : children) child.refreshListeners();
+        }
+        private CompletableFuture<Boolean> waitDataAsync() {
+            try {
+                if (asyncCondition == 0) // NOT_READ, ANY_VIEW, ANY_INSTANCE, including invalid-data lifecycle notifications.
+                    asyncCondition = Native.readCondition(handle, 2 | 12 | 112);
+                if (Native.triggered(asyncCondition)) return CompletableFuture.completedFuture(true);
+                var future = new CompletableFuture<Boolean>();
+                dataWaiters.add(future);
+                future.whenComplete((value, error) -> {
+                    synchronized (root) {
+                        if (dataWaiters.remove(future) && handle != 0) refreshListeners();
+                    }
+                });
+                try {
+                    refreshListeners();
+                    // Close the race between the initial availability check and listener installation.
+                    if (Native.triggered(asyncCondition)) completeWaiters(true);
+                } catch (RuntimeException error) {
+                    dataWaiters.remove(future);
+                    refreshListeners();
+                    throw error;
+                }
+                return future;
+            } catch (DdsException error) { throw Errors.unchecked(env, error); }
+        }
+        private void onDataSignal(int kind) {
+            synchronized (root) {
+                if (handle == 0 || root.handle == 0) return;
+                signalWaiters();
+            }
+        }
+        private void signalWaiters() {
+            if (!dataWaiters.isEmpty() && Native.triggered(asyncCondition)) completeWaiters(true);
+            // A subscriber's DataOnReaders listener can suppress reader notifications.
+            for (State child : List.copyOf(children)) child.signalWaiters();
+        }
+        private void completeWaiters(boolean available) {
+            var waiting = List.copyOf(dataWaiters);
+            dataWaiters.clear();
+            if (available && handle != 0) refreshListeners();
+            // User continuations must not execute under the participant monitor.
+            for (var future : waiting) future.completeAsync(() -> available);
         }
         private EntityQos<?> defaultQos(Class<?> api) {
             return defaults.computeIfAbsent(api, key -> (EntityQos<?>) Policies.defaults(env, key, key == DataWriterQos.class));
@@ -459,9 +558,10 @@ final class Entities {
         @SuppressWarnings("unchecked") private byte[] encode(Object value) {
             type.getType().cast(Objects.requireNonNull(value));
             var representation = (DataRepresentation) qos.get(DataRepresentation.class);
-            var cdr = new CdrWriter(kind == Kind.WRITER && representation != null && representation.getValue().get(0) == 0 ? 1 : 2);
-            ((CycloneTypeSupport<Object>) type).binding().codec().write(cdr, value);
-            return cdr.toByteArray();
+            try (var cdr = CdrWriter.pooled(kind == Kind.WRITER && representation != null && representation.getValue().get(0) == 0 ? 1 : 2)) {
+                ((CycloneTypeSupport<Object>) type).binding().codec().write(cdr, value);
+                return cdr.toByteArray();
+            }
         }
         @SuppressWarnings("unchecked") private Object keyValue(Object[] args) throws ReflectiveOperationException {
             if (builtinKind != 0) {
@@ -615,13 +715,16 @@ final class Entities {
             if ((kind == Kind.TOPIC || kind == Kind.FILTER_TOPIC) && root.usesTopic(this)) throw new Errors.Precondition(env, "Topic is still used by a reader or writer");
             closeChildren();
             for (var condition : List.copyOf(conditions)) closeReadCondition(condition);
+            completeWaiters(false);
+            if (asyncCondition != 0) { Native.delete(asyncCondition); asyncCondition = 0; }
             if (!borrowed) Native.delete(handle); handle = 0; builtinKeys.clear();
             if (filterContext != 0) { Native.filterFree(filterContext); filterContext = 0; }
             dispatch.configure(new ListenerDispatch.Target[13]);
             if (listenerContext != 0) { Native.listenerFree(listenerContext); listenerContext = 0; }
             if (statusCondition != null) statusCondition.invalidate();
             if (parent != null) parent.children.remove(this);
-            else dispatch.shutdown();
+            dispatch.shutdown();
+            onClosed.run();
         }
     }
 }

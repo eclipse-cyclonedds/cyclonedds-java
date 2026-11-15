@@ -250,12 +250,13 @@ version dependent; use the same Cyclone DDS installation at build time and runti
 Listener dispatch and filtering
 -------------------------------
 
-Native listeners copy status values into a Java event queue. One daemon executor
-per participant invokes application listeners outside participant monitors and
-native callbacks. Effective masks choose the nearest enabled ancestor listener;
+Native listeners copy status values into serial queues per originating entity.
+Shared daemon workers invoke application listeners outside participant monitors
+and native callbacks. Independent endpoints can dispatch concurrently, and pending
+data-availability notifications are coalesced. Effective masks choose the nearest enabled ancestor listener;
 each event retains its actual source and an immutable status snapshot. Target
-replacement/closure cancels queued delivery, and participant closure shuts down
-its executor. In-flight callbacks may finish afterward. Native entity deletion
+replacement/closure cancels queued delivery, and participant closure clears all
+of its entity queues. In-flight callbacks may finish afterward. Native entity deletion
 quiesces callbacks before JNI global references are freed.
 
 SQL predicates decode a sample with its generated Java codec and use accessors

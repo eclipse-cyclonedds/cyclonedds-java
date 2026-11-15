@@ -28,9 +28,19 @@ public final class DataWriter<T> extends Entity {
     public void write(T value) {
         synchronized (participant) {
             requireOpen();
-            CdrWriter cdr = new CdrWriter();
-            codec.write(cdr, Objects.requireNonNull(value));
-            Native.write(handle, cdr.toByteArray());
+            try (CdrWriter cdr = CdrWriter.pooled(2)) {
+                codec.write(cdr, Objects.requireNonNull(value));
+                Native.write(handle, cdr.toByteArray());
+            }
+        }
+    }
+    public void writeDispose(T value) {
+        synchronized (participant) {
+            requireOpen();
+            try (CdrWriter cdr = CdrWriter.pooled(2)) {
+                codec.write(cdr, Objects.requireNonNull(value));
+                Native.writeDispose(handle, cdr.toByteArray(), -1);
+            }
         }
     }
     public int matchedSubscriptions() {

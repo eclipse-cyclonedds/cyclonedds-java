@@ -10,7 +10,7 @@
    SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
 
 Maven: runtime and IDL compiler
-==============================
+===============================
 
 The distribution has two JAR artifacts, both version ``11.0.1`` in Maven group
 ``org.eclipse.cyclonedds``:
@@ -112,7 +112,7 @@ native binaries does not cross-compile new C libraries. The maintainer must
 build and test each native variant first.
 
 The release matrix requires Linux on x86-64 and ARM64, macOS on ARM64, and
-Windows on x86-64 for both JARs. macOS Intel is not a release target.
+Windows on x86-64 and ARM64 for both JARs. macOS Intel is not a release target.
 A missing host compiler/runtime is reported explicitly.
 A local CMake build includes only its host by default; its platform indexes
 list only actual supplied binaries. Release aggregation fails when any required
@@ -170,7 +170,7 @@ local host. The assembler emits each kind separately:
    java -cp org.eclipse.cyclonedds.idlc-11.0.1-linux-x86_64.jar \
      org.eclipse.cyclonedds.idlc.UniversalJar --kind runtime \
      --output org.eclipse.cyclonedds-11.0.1.jar --version 11.0.1 \
-     --platforms linux-x86_64,linux-aarch64,macos-aarch64,windows-x86_64 \
+     --platforms linux-x86_64,linux-aarch64,macos-aarch64,windows-x86_64,windows-aarch64 \
      --input-dir platform-builds
 
 Use ``--kind compiler`` and output ``org.eclipse.cyclonedds.idlc-11.0.1.jar`` for
@@ -200,7 +200,7 @@ goal/descriptor. This same final compiler JAR is usable through Maven or
 artifacts. ``mvn package`` at repository root builds only the Java runtime.
 No command publishes remotely.
 
-``.github/workflows/universal.yml`` builds four native variants, assembles the two
+``.github/workflows/universal.yml`` builds five desktop native variants, assembles the two
 JARs, adds the compiler's Maven integration and tests the identical pair on every
 host. It prepares JARs and POMs as workflow artifacts; remote results must be
 checked separately before release.

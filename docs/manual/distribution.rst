@@ -52,7 +52,7 @@ without a system Cyclone DDS installation, CMake or a C compiler. Building the
 binding itself still requires the matching native core and development tools.
 A local CMake build combines the local platform; :doc:`maven` describes the
 multi-platform assembly and mandatory release platform checks. Release targets
-are Linux x86-64/ARM64, macOS ARM64 and Windows x86-64.
+are Linux x86-64/ARM64, macOS ARM64 and Windows x86-64/ARM64.
 
 Verify an extracted archive
 ---------------------------
@@ -99,17 +99,20 @@ compiler JAR with its Maven integration. Explicit ``cyclonedds.runtime.jar`` and
 :doc:`maven` for commands. Nothing is published automatically.
 
 ``.github/workflows/universal.yml`` builds Linux on ARM64 and x86-64,
-macOS on ARM64, and Windows on x86-64,
+macOS on ARM64, and Windows on x86-64/ARM64,
 aggregates each kind into its own JAR, then verifies the same runtime/compiler
-pair on all four hosts. Each build uses the pinned core below. Local validation
+pair on all five hosts. Each build uses the core selection below. Local validation
 is macOS ARM64; remote workflow results must be checked separately.
 
 Unmodified core and reproducibility
 -----------------------------------
 
-The binding builds against unmodified Cyclone DDS revision
-``3a5526315e64ac1d2a52e6ac1ae7f3e861c593d3``. CI checks out and builds that revision
-directly. No binding-specific core patches are applied, installed or bundled.
+Branch and pull-request builds use the latest Cyclone DDS ``master``. When the
+Java wrapper is built from a tag, CI requires the exact same tag in the C core
+repository; a missing tag fails the workflow without falling back to master.
+The prepare job resolves the selected ref once, then all desktop and Android
+jobs build that same commit. No core commit is hard-coded in the workflow.
+The resolved commit is recorded in the job log and Android build metadata. No binding-specific core patches are applied, installed or bundled.
 The standalone runtime JAR embeds the matching unmodified core and its original
 license notices. Runtime behavior is verified against independent C peers built
 with the same unmodified installation.
@@ -118,3 +121,43 @@ Core limitations remain explicit: unsupported enabled-reader time-based filter
 updates are rejected, wchar/negative signed 64-bit union labels are diagnosed,
 and generated representation restrictions keep unsupported schemas off XCDR1
 endpoints. Java codec-only vectors do not establish native DDS interoperability.
+
+Mobile cross-builds
+-------------------
+
+The Android CI job builds JNI for ``arm64-v8a``, ``x86_64``, ``armeabi-v7a`` and
+``x86`` using NDK ``27.2.12479018`` and Android API 28, with 16 KB page support.
+The NDK version, desktop runner labels and action versions follow the
+`C# binding CI <https://github.com/eclipse-cyclonedds/cyclonedds-csharp/blob/master/.github/workflows/build.yml>`_.
+Java artifact versions are maintained in the project files; core selection follows
+the branch/tag policy above. Desktop builds use JDK 17 (Microsoft OpenJDK on Windows ARM64,
+Temurin elsewhere); Android SDK tooling uses Temurin JDK 21.
+
+Each ``android-jni-<abi>`` workflow artifact contains
+``jniLibs/<abi>/libcycloneddsjava.so``, license notices, an ELF report and build
+metadata with a SHA-256 digest. The matching DDS core is statically linked into
+JNI. No Android compiler executable is built. CI verifies architecture, SONAME
+and LOAD segment alignment. It does not run an emulator or establish Android
+Java runtime compatibility. These payloads are separate from the universal
+JARs; they are experimental native build artifacts, not a ready-to-use AAR.
+
+To repeat the native build locally (CMake 3.21+, Python 3 and the pinned NDK):
+
+.. code-block:: sh
+
+   python3 scripts/build-android.py --ndk /path/to/android/ndk/27.2.12479018 --abi arm64-v8a
+
+Use ``--ref <tag>`` to select a release core locally. An existing core checkout
+can be supplied with ``--source`` for an offline build; it is used unchanged. ``BUILD_NATIVE_ONLY=ON`` configures only the JNI target, without
+requiring a host JDK, IDL compiler, examples or JVM tests.
+
+An Android application still needs Java 17 API/desugaring compatibility checks,
+Android-specific library loading/packaging and device or emulator tests. The
+current desktop loader extracts bundled libraries into a temporary directory;
+it is not an Android integration. Load the packaged JNI library through the
+Android application's native-library mechanism when developing that integration.
+
+iOS ARM64 (including the simulator) is not configured: the current binding
+requires a JVM with JNI and has no iOS Java/AOT toolchain or static native
+registration. Building the C core for iOS alone would not validate this Java
+provider. Supporting iOS requires a separate runtime integration first.

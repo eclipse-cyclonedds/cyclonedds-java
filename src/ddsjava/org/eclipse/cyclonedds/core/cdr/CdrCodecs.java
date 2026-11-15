@@ -70,6 +70,22 @@ public final class CdrCodecs {
     public static final Codec<Long> LONG = of(CdrWriter::writeLong, CdrReader::readLong);
     public static final Codec<Float> FLOAT = of(CdrWriter::writeFloat, CdrReader::readFloat);
     public static final Codec<Double> DOUBLE = of(CdrWriter::writeDouble, CdrReader::readDouble);
+    /** Bit masks use their rounded unsigned storage width in both XCDR versions. */
+    public static <T> Codec<T> bitmask(int bits, ToLongFunction<T> value, LongFunction<T> create) {
+        if (bits < 1 || bits > 64) throw new IllegalArgumentException("Invalid bitmask bit bound");
+        return of((w, mask) -> {
+            long n = value.applyAsLong(Objects.requireNonNull(mask));
+            if (bits < 64 && (n >>> bits) != 0) throw new IllegalArgumentException("Bitmask exceeds bit bound");
+            if (bits <= 8) w.writeByte((byte) n);
+            else if (bits <= 16) w.writeShort((short) n);
+            else if (bits <= 32) w.writeInt((int) n);
+            else w.writeLong(n);
+        }, r -> {
+            long n = bits <= 8 ? Byte.toUnsignedLong(r.readByte()) : bits <= 16 ? Short.toUnsignedLong(r.readShort())
+                : bits <= 32 ? Integer.toUnsignedLong(r.readInt()) : r.readLong();
+            return create.apply(n);
+        });
+    }
     public static <E> Codec<E> enumeration(int bits, ToIntFunction<E> value, IntFunction<E> factory) {
         return enumeration(bits, value, factory, () -> factory.apply(0));
     }

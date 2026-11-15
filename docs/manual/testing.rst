@@ -78,3 +78,32 @@ related Java tests are not automatically counted as equivalent. Runtime dynamic
 types, participant-factory XML QoS profiles, bitmasks, statistics and shared-memory
 loans still have feature gaps. Rejection tests verify diagnostics and do not count as successful feature
 coverage. See :doc:`roadmap` for implementation limitations.
+
+Async, bitmask and resource validation
+--------------------------------------
+
+``async-listeners`` checks multiple pending waits, cancellation, already-read
+history, ancestor notifications, callback isolation/coalescing, retained callback
+failures, typed predicates and combined timestamped write/dispose.
+``bitmask-interop`` checks signed high bits, all rounded storage widths, both byte
+orders, collections/unions, optional XCDR2 values and independent C exchange in
+XCDR1/XCDR2. It also verifies pooled-buffer reuse after an interrupted codec.
+
+``lifecycle-stress`` runs in a separate serial process for 20 seconds by default.
+It alternates XCDR1/XCDR2, validates payloads up to 65,536 characters, replaces
+listeners, cancels waits and races writes/cancellation against parent/child closure.
+Captured native entity trees must be deleted and weak references to closed
+participants, endpoints and futures must clear. After warmup, broad growth guards
+allow less than 32 MiB retained Java heap and fewer than 32 additional file
+descriptors on hosts exposing that metric. These guards are not a native leak
+profiler or proof of long-term memory stability.
+
+.. code-block:: sh
+
+   ctest --test-dir build -L stress --output-on-failure -V
+   cmake -S . -B build -DPARITY_STRESS_TIMEOUT=420
+   CYCLONEDDS_JAVA_STRESS_SECONDS=300 ctest --test-dir build -L stress --output-on-failure -V
+
+The duration accepts 1..3600 seconds. For extended runs, set
+``PARITY_STRESS_TIMEOUT`` at CMake configuration time above the requested duration
+plus warmup/check overhead; the default CTest watchdog is 180 seconds.

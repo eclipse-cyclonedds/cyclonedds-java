@@ -19,7 +19,7 @@ import org.omg.dds.domain.*;
 
 final class ParticipantFactory extends DomainParticipantFactory {
     private final ServiceEnvironment env;
-    private final List<DomainParticipant> participants = new ArrayList<>();
+    private final Set<DomainParticipant> participants = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private DomainParticipantQos defaults;
     private DomainParticipantFactoryQos qos;
     ParticipantFactory(ServiceEnvironment env) {
@@ -38,6 +38,7 @@ final class ParticipantFactory extends DomainParticipantFactory {
         participants.removeIf(participant -> !Entities.isOpen(participant));
         DomainParticipant participant = Entities.participant(env, domain, value, listener, statuses);
         participants.add(participant);
+        Entities.onClose(participant, () -> participants.remove(participant));
         return participant;
     }
     public synchronized DomainParticipant lookupParticipant(int domain) {

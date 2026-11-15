@@ -9,7 +9,12 @@
 # SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
 
 cmake_minimum_required(VERSION 3.21)
-project(CycloneDDSJava VERSION 11.0.1 LANGUAGES C Java)
+option(BUILD_NATIVE_ONLY "Build only the JNI library (for Android cross-compilation)" OFF)
+if(BUILD_NATIVE_ONLY)
+  project(CycloneDDSJava VERSION 11.0.1 LANGUAGES C)
+else()
+  project(CycloneDDSJava VERSION 11.0.1 LANGUAGES C Java)
+endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 if(MSVC)
@@ -17,7 +22,13 @@ if(MSVC)
   add_compile_options(/utf-8)
 endif()
 
-find_package(CycloneDDS ${PROJECT_VERSION} EXACT REQUIRED)
+# Branch CI follows core master; its version can differ from the Java artifact.
+find_package(CycloneDDS REQUIRED)
+if(BUILD_NATIVE_ONLY)
+  include(GNUInstallDirs)
+  add_subdirectory(src/jni)
+  return()
+endif()
 find_package(Java 17 REQUIRED COMPONENTS Development)
 include(UseJava)
 include(CTest)
@@ -173,7 +184,7 @@ if(BUILD_TESTING)
       set_tests_properties(maven-consumer PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
     endif()
   endif()
-  idljava_generate(TARGET test-types FILES tests/idl/Types.idl tests/idl/Naming.idl tests/idl/Annotations.idl
+  idljava_generate(TARGET test-types FILES tests/idl/Types.idl tests/idl/Parity.idl tests/idl/Naming.idl tests/idl/Annotations.idl
     tests/upstream/idl/RecursiveExternalUnionCase.idl
     tests/upstream/idl/RecursiveMutualSequence.idl
     tests/upstream/idl/RecursiveOptionalArraySelf.idl
@@ -302,6 +313,20 @@ if(BUILD_TESTING)
       -cp "${CMAKE_CURRENT_BINARY_DIR}/omg-api-tests.jar${CP_SEPARATOR}${TEST_CP}" "org.eclipse.cyclonedds.tests.Omg${operation_test}Test")
     set_tests_properties("omg-${operation_name}" PROPERTIES TIMEOUT 40)
   endforeach()
+  add_test(NAME async-listeners COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni
+    "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>" -cp "${TEST_CP}"
+    org.eclipse.cyclonedds.tests.AsyncParityTest)
+  add_test(NAME bitmask-interop COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni
+    "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>" -cp "${TEST_CP}"
+    org.eclipse.cyclonedds.tests.BitmaskParityTest "$<TARGET_FILE:parity-peer>")
+  add_test(NAME lifecycle-stress COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni
+    "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>" -cp "${TEST_CP}"
+    org.eclipse.cyclonedds.tests.ParityStressTest)
+  set_tests_properties(async-listeners bitmask-interop PROPERTIES TIMEOUT 60)
+  set(PARITY_STRESS_TIMEOUT 180 CACHE STRING "CTest watchdog seconds for the lifecycle stress process")
+  set_tests_properties(lifecycle-stress PROPERTIES TIMEOUT ${PARITY_STRESS_TIMEOUT} RUN_SERIAL TRUE LABELS stress)
+  set_tests_properties(async-listeners bitmask-interop lifecycle-stress PROPERTIES
+    ENVIRONMENT "CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address=\"127.0.0.1\"/></Interfaces><AllowMulticast>false</AllowMulticast></General><Discovery><ParticipantIndex>auto</ParticipantIndex><Peers><Peer Address=\"127.0.0.1\"/></Peers></Discovery></Domain></CycloneDDS>")
   add_test(NAME generated-types COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>" -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.GeneratedTypesTest)
   add_test(NAME annotations COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni
     "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>" -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.AnnotationTest)

@@ -1,15 +1,25 @@
 {
   "python:tests/test_bitmasks.py:test_bit_masks": {
-    "status": "missing",
-    "ctest": [],
-    "reason": "IDL bitmask generation is not implemented.",
-    "sources": []
+    "status": "partial",
+    "ctest": [
+      "bitmask-interop"
+    ],
+    "reason": "Generated typed Java bitmask combinations, bounds, high bits, endian vectors and independent XCDR1/XCDR2 C exchange are covered. Python-specific bitmask class semantics are not reproduced.",
+    "sources": [
+      "tests/java/org/eclipse/cyclonedds/tests/BitmaskParityTest.java",
+      "tests/c/parity_peer.c"
+    ]
   },
   "python:tests/test_bitmasks.py:test_bit_mask_serialisation": {
-    "status": "missing",
-    "ctest": [],
-    "reason": "IDL bitmask generation is not implemented.",
-    "sources": []
+    "status": "partial",
+    "ctest": [
+      "bitmask-interop"
+    ],
+    "reason": "Generated typed Java bitmask combinations, bounds, high bits, endian vectors and independent XCDR1/XCDR2 C exchange are covered. Python-specific bitmask class semantics are not reproduced.",
+    "sources": [
+      "tests/java/org/eclipse/cyclonedds/tests/BitmaskParityTest.java",
+      "tests/c/parity_peer.c"
+    ]
   },
   "python:tests/test_communication.py:test_communication_basic_read": {
     "status": "adapted",

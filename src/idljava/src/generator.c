@@ -44,6 +44,7 @@ static bool core_xcdr1_restricted(const void *node, const void **seen, size_t de
     for (const idl_member_t *m = type->members; m; m = idl_next(m)) {
       bool array = false;
       for (const idl_declarator_t *d = m->declarators; d; d = idl_next(d)) if (idl_is_array(d)) array = true;
+      if (m->optional.value && idl_is_bitmask(idl_strip(idl_type_spec(m), IDL_STRIP_ALIASES | IDL_STRIP_FORWARD))) return true;
       if (core_xcdr1_restricted(idl_type_spec(m), seen, depth, m->optional.value && !array)) return true;
     }
   } else if (idl_is_union(node)) {
@@ -123,7 +124,7 @@ static const char *transform_name(const char *name, int style) {
 static const char *mapped_name(const void *ptr) {
   const idl_node_t *node = ptr;
   const char *name = idl_identifier(node);
-  if (java_naming(node)) name = transform_name(name, idl_is_module(node) ? 0 : idl_is_enumerator(node) || idl_is_const(node) ? 1 : idl_is_declarator(node) ? 3 : 2);
+  if (java_naming(node)) name = transform_name(name, idl_is_module(node) ? 0 : idl_is_enumerator(node) || idl_is_bit_value(node) || idl_is_const(node) ? 1 : idl_is_declarator(node) ? 3 : 2);
   return java_name(name);
 }
 
@@ -131,7 +132,7 @@ static char *qualified(const idl_node_t *node, const char *separator, bool escap
   const idl_node_t *parts[128];
   size_t count = 0, size = 1;
   for (const idl_node_t *p = node; p; p = p->parent) {
-    if (!idl_is_module(p) && !idl_is_struct(p) && !idl_is_enum(p) && !idl_is_union(p) && !(idl_mask(p) & IDL_ANNOTATION)) continue;
+    if (!idl_is_module(p) && !idl_is_struct(p) && !idl_is_enum(p) && !idl_is_bitmask(p) && !idl_is_union(p) && !(idl_mask(p) & IDL_ANNOTATION)) continue;
     if (count == 128) return NULL;
     parts[count++] = p;
     size += strlen(idl_identifier(p)) + 6 + strlen(separator);
@@ -206,7 +207,7 @@ static bool supported(const void *spec) {
   struct array_shape array = shape(spec);
   if (!array.valid) return false;
   const void *type = array.base;
-  if (primitive(type, false) || idl_is_struct(type) || idl_is_enum(type) || idl_is_union(type)) return true;
+  if (primitive(type, false) || idl_is_struct(type) || idl_is_enum(type) || idl_is_bitmask(type) || idl_is_union(type)) return true;
   if (idl_is_sequence(type)) return supported(((const idl_sequence_t *) type)->type_spec);
   return false;
 }
@@ -283,7 +284,9 @@ static void emit_codec(FILE *out, const void *spec) {
     }
   } else {
     char *scoped = qualified(type, ".", true);
-    if (idl_is_enum(type)) {
+    if (idl_is_bitmask(type)) {
+      fprintf(out, "org.eclipse.cyclonedds.core.cdr.CdrCodecs.<%s>bitmask(%"PRIu16", %s::getValue, %s::new)", scoped, ((const idl_bitmask_t *)type)->bit_bound.value, scoped, scoped);
+    } else if (idl_is_enum(type)) {
       fprintf(out, "org.eclipse.cyclonedds.core.cdr.CdrCodecs.<%s>enumeration(%"PRIu16", %s::getValue, %s::valueOf, () -> ", scoped, ((const idl_enum_t *) type)->bit_bound.value, scoped, scoped);
       if (((const idl_enum_t *) type)->extensibility.value == IDL_FINAL)
         fputs("{ throw new IllegalArgumentException(\"Unknown value of final enum\"); }", out);
@@ -317,6 +320,7 @@ static void emit_default(FILE *out, const void *spec) {
     if (basic_sequence(type)) fprintf(out, "new org.eclipse.cyclonedds.type.seq.%sSequence()", sequence_name(((const idl_sequence_t *) type)->type_spec));
     else fputs("new java.util.ArrayList<>()", out);
   } else if (idl_is_struct(type) || idl_is_union(type)) { fputs("new ", out); emit_type(out, type); fputs("()", out); }
+  else if (idl_is_bitmask(type)) { char *q = qualified(type, ".", true); fprintf(out, "new %s(0L)", q); free(q); }
   else if (idl_is_enum(type)) {
     const idl_enum_t *en = type; char *scoped = qualified(type, ".", true);
     fprintf(out, "%s.%s", scoped, mapped_name(en->default_enumerator ? en->default_enumerator : en->enumerators)); free(scoped);
@@ -418,6 +422,11 @@ static void emit_literal(FILE *out, const void *spec, const idl_literal_t *value
     bool custom = strcmp(string_type(), "java.lang.String") != 0;
     if (custom) fprintf(out, "new %s(", string_type());
     java_string(out, value->value.str); if (custom) fputc(')', out); return;
+  }
+  if (idl_is_bitmask(type)) {
+    char *q = qualified(type, ".", true);
+    fprintf(out, "new %s(0x%"PRIx64"L)", q, value->value.uint64);
+    free(q); return;
   }
   if (idl_is_enum(type)) {
     char *q = qualified(type, ".", true);
@@ -642,7 +651,7 @@ static idl_retcode_t emit_struct(FILE *out, const idl_pstate_t *pstate, const id
     fputs("    public ", out); emit_member_type(out, m, d); fprintf(out, " get_%s() { return %s; }\n", member, member);
     if (short_accessor(node, member)) { fputs("    public ", out); emit_member_type(out, m, d); fprintf(out, " %s() { return get_%s(); }\n", member, member); }
     fprintf(out, "    public void set_%s(", member); emit_member_type(out, m, d); fputs(" value) {\n", out);
-    bool ref = a.count || idl_is_string(type) || idl_type(type) == IDL_WSTRING || idl_is_sequence(type) || idl_is_struct(type) || idl_is_enum(type) || idl_is_union(type) || (promote_width() && (idl_type(type) == IDL_UINT64 || idl_type(type) == IDL_ULLONG)) || m->external.value || m->optional.value;
+    bool ref = a.count || idl_is_string(type) || idl_type(type) == IDL_WSTRING || idl_is_sequence(type) || idl_is_struct(type) || idl_is_enum(type) || idl_is_bitmask(type) || idl_is_union(type) || (promote_width() && (idl_type(type) == IDL_UINT64 || idl_type(type) == IDL_ULLONG)) || m->external.value || m->optional.value;
     if (ref && !m->optional.value && !m->external.value) fputs("        java.util.Objects.requireNonNull(value);\n", out);
     if (m->optional.value || m->external.value) fputs("        if (value != null) {\n", out);
     if (a.count) { fputs("        org.eclipse.cyclonedds.core.cdr.CdrCodecs.validateArray(value, ", out); emit_dimensions(out, a); fputs(");\n", out); }
@@ -719,6 +728,29 @@ static idl_retcode_t emit_struct(FILE *out, const idl_pstate_t *pstate, const id
   emit_verbatim(out, &node->node, "END_DECLARATION");
   fputs("}\n", out);
   free(dds_name); free(blobs.typeinfo); free(blobs.typemap); return IDL_RETCODE_OK;
+}
+
+static idl_retcode_t emit_bitmask(FILE *out, const idl_bitmask_t *node) {
+  const char *name = mapped_name(node);
+  uint16_t bits = node->bit_bound.value;
+  if (bits < 1 || bits > 64) return IDL_RETCODE_UNSUPPORTED;
+  fprintf(out, "public record %s(long value) implements java.io.Serializable {\n    private static final long serialVersionUID = 1L;\n", name);
+  uint64_t allowed = 0;
+  for (const idl_bit_value_t *bit = node->bit_values; bit; bit = idl_next(bit)) allowed |= UINT64_C(1) << bit->position.value;
+  fprintf(out, "    public %s { if ((value & ~0x%"PRIx64"L) != 0) throw new IllegalArgumentException(\"Undefined bitmask flag\"); }\n", name, allowed);
+  for (const idl_bit_value_t *bit = node->bit_values; bit; bit = idl_next(bit)) {
+    const char *constant = mapped_name(bit);
+    if (strcmp(constant, "value") == 0 || strcmp(constant, "serialVersionUID") == 0) {
+      fprintf(stderr, "idljava: bitmask flag collides with generated member\n"); return IDL_RETCODE_UNSUPPORTED;
+    }
+    fprintf(out, "    public static final %s %s = new %s(0x%"PRIx64"L);\n", name, constant, name, UINT64_C(1) << bit->position.value);
+  }
+  fputs("    public long getValue() { return value; }\n", out);
+  fprintf(out, "    public static %s fromValue(long value) { return new %s(value); }\n", name, name);
+  fprintf(out, "    public %s or(%s other) { return new %s(value | other.value); }\n", name, name, name);
+  fprintf(out, "    public %s and(%s other) { return new %s(value & other.value); }\n", name, name, name);
+  fprintf(out, "    public boolean contains(%s other) { return (value & other.value) == other.value; }\n}\n", name);
+  return IDL_RETCODE_OK;
 }
 
 static idl_retcode_t emit_enum(FILE *out, const idl_enum_t *node) {
@@ -1105,7 +1137,7 @@ static idl_retcode_t emit_nodes(const idl_pstate_t *pstate, const idlc_generator
     }
     if ((idl_mask(node) & IDL_ANNOTATION) && strcmp(idl_identifier(node), "java_mapping") == 0) continue;
     if (idl_is_const(node) || idl_is_typedef(node) || idl_is_forward(node)) continue; /* aliases resolve to their Java target type */
-    if (!idl_is_struct(node) && !idl_is_enum(node) && !idl_is_union(node) && !(idl_mask(node) & IDL_ANNOTATION)) {
+    if (!idl_is_struct(node) && !idl_is_enum(node) && !idl_is_bitmask(node) && !idl_is_union(node) && !(idl_mask(node) & IDL_ANNOTATION)) {
       fprintf(stderr, "idljava: unsupported declaration %s\n", idl_identifier(node));
       return IDL_RETCODE_UNSUPPORTED;
     }
@@ -1128,7 +1160,7 @@ static idl_retcode_t emit_nodes(const idl_pstate_t *pstate, const idlc_generator
     char *dot = strrchr(scoped, '.');
     if (dot) { *dot = 0; fprintf(out, "package %s;\n\n", scoped); }
     emit_verbatim(out, node, "BEFORE_DECLARATION");
-    rc = idl_is_struct(node) ? emit_struct(out, pstate, (const idl_struct_t *) node, config) : idl_is_union(node) ? emit_union(out, pstate, (const idl_union_t *) node, config) : idl_is_enum(node) ? emit_enum(out, (const idl_enum_t *) node) : emit_annotation(out, (const idl_annotation_t *) node);
+    rc = idl_is_struct(node) ? emit_struct(out, pstate, (const idl_struct_t *) node, config) : idl_is_union(node) ? emit_union(out, pstate, (const idl_union_t *) node, config) : idl_is_enum(node) ? emit_enum(out, (const idl_enum_t *) node) : idl_is_bitmask(node) ? emit_bitmask(out, (const idl_bitmask_t *)node) : emit_annotation(out, (const idl_annotation_t *) node);
     emit_verbatim(out, node, "AFTER_DECLARATION");
     emit_verbatim(out, node, "END_FILE");
     bool write_error = ferror(out) != 0;

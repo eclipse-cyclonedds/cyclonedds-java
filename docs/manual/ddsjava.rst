@@ -38,5 +38,5 @@ directory; that filesystem must permit loading native code.
 Application type generation uses the packaged host compiler through Maven or
 ``java -jar``; no native build tools are needed. Building the binding itself
 requires CMake 3.21+, JDK 17+, a C11 compiler and the matching Cyclone DDS installation with IDL/DDSI development
-headers and the ``idlc`` compiler. The tested core revision is
-``3a5526315e64ac1d2a52e6ac1ae7f3e861c593d3`` (11.0.1).
+headers and the ``idlc`` compiler. Branch CI uses the latest Cyclone DDS ``master``; tag builds use the exact
+same core tag as the Java wrapper. See :doc:`distribution` for core selection.

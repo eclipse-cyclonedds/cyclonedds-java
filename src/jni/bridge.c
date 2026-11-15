@@ -21,9 +21,19 @@
 #include "dds/ddsrt/heap.h"
 
 #include "typesupport.h"
+#include "dds/ddsi/ddsi_protocol.h"
 
 #define JNI_METHOD(name) Java_org_eclipse_cyclonedds_internal_Native_##name
 #define UNUSED_CLASS (void) cls
+
+/* Android's C JNI declaration takes JNIEnv **; desktop JNI takes void **. */
+static jint attach_daemon(JavaVM *vm, JNIEnv **env) {
+#ifdef __ANDROID__
+  return (*vm)->AttachCurrentThreadAsDaemon(vm, env, NULL);
+#else
+  return (*vm)->AttachCurrentThreadAsDaemon(vm, (void **) env, NULL);
+#endif
+}
 
 static void fail(JNIEnv *env, const char *operation, dds_return_t code) {
   if ((*env)->ExceptionCheck(env)) return;
@@ -303,7 +313,24 @@ JNIEXPORT void JNICALL JNI_METHOD(delete)(JNIEnv *env, jclass cls, jint entity) 
   if (result < 0) fail(env, "dds_delete", result);
 }
 
-static void write_cdr(JNIEnv *env, jint writer, jbyteArray bytes, jlong timestamp) {
+JNIEXPORT jint JNICALL JNI_METHOD(entityParent)(JNIEnv *env, jclass cls, jint entity) {
+  UNUSED_CLASS; (void)env; return dds_get_parent(entity);
+}
+JNIEXPORT jintArray JNICALL JNI_METHOD(entityChildren)(JNIEnv *env, jclass cls, jint entity) {
+  UNUSED_CLASS;
+  int32_t count = dds_get_children(entity, NULL, 0);
+  if (count < 0) { fail(env, "dds_get_children", count); return NULL; }
+  dds_entity_t *children = count ? calloc((size_t)count, sizeof(*children)) : NULL;
+  if (count && !children) { fail(env, "Child allocation", DDS_RETCODE_OUT_OF_RESOURCES); return NULL; }
+  int32_t actual = dds_get_children(entity, children, (size_t)count);
+  if (actual < 0) { free(children); fail(env, "dds_get_children", actual); return NULL; }
+  if (actual > count) actual = count;
+  jintArray result = (*env)->NewIntArray(env, actual);
+  if (result && actual) (*env)->SetIntArrayRegion(env, result, 0, actual, children);
+  free(children); return result;
+}
+
+static void write_cdr(JNIEnv *env, jint writer, jbyteArray bytes, jlong timestamp, bool dispose) {
   const struct ddsi_sertype *type;
   dds_return_t rc = dds_get_entity_sertype(writer, &type);
   if (rc < 0) { fail(env, "dds_get_entity_sertype", rc); return; }
@@ -317,16 +344,23 @@ static void write_cdr(JNIEnv *env, jint writer, jbyteArray bytes, jlong timestam
   if (!sample) { fail(env, "Validate serialized sample", DDS_RETCODE_BAD_PARAMETER); return; }
   /* writecdr consumes one reference once the writer is locked. Java serializes deletion
      with writes and never installs topic filters, so early failure paths cannot occur. */
-  if (timestamp < 0) rc = dds_writecdr(writer, sample);
-  else { sample->timestamp.v = timestamp; sample->statusinfo = 0; rc = dds_forwardcdr(writer, sample); }
+  if (timestamp < 0 && !dispose) rc = dds_writecdr(writer, sample);
+  else {
+    sample->timestamp.v = timestamp < 0 ? dds_time() : timestamp;
+    sample->statusinfo = dispose ? DDSI_STATUSINFO_DISPOSE : 0u;
+    rc = dds_forwardcdr(writer, sample);
+  }
   if (rc < 0) fail(env, "dds_writecdr", rc);
 }
 
 JNIEXPORT void JNICALL JNI_METHOD(write)(JNIEnv *env, jclass cls, jint writer, jbyteArray bytes) {
-  UNUSED_CLASS; write_cdr(env, writer, bytes, -1);
+  UNUSED_CLASS; write_cdr(env, writer, bytes, -1, false);
+}
+JNIEXPORT void JNICALL JNI_METHOD(writeDispose)(JNIEnv *env, jclass cls, jint writer, jbyteArray bytes, jlong timestamp) {
+  UNUSED_CLASS; write_cdr(env, writer, bytes, timestamp, true);
 }
 JNIEXPORT void JNICALL JNI_METHOD(writeAt)(JNIEnv *env, jclass cls, jint writer, jbyteArray bytes, jlong timestamp) {
-  UNUSED_CLASS; write_cdr(env, writer, bytes, timestamp);
+  UNUSED_CLASS; write_cdr(env, writer, bytes, timestamp, false);
 }
 
 struct collected_samples { struct ddsi_serdata **samples; dds_sample_info_t *infos; uint32_t count; const struct ddsi_sertype **types; };
@@ -978,7 +1012,7 @@ struct listener_context { JavaVM *vm; jobject receiver; jmethodID receive; };
 static void emit_event(struct listener_context *ctx, int kind, const jlong *values, int count) {
   JNIEnv *env = NULL;
   bool attached = (*ctx->vm)->GetEnv(ctx->vm, (void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED;
-  if (attached && (*ctx->vm)->AttachCurrentThreadAsDaemon(ctx->vm, (void **) &env, NULL) != JNI_OK) return;
+  if (attached && attach_daemon(ctx->vm, &env) != JNI_OK) return;
   jlongArray data = (*env)->NewLongArray(env, count);
   if (data) {
     (*env)->SetLongArrayRegion(env, data, 0, count, values);
@@ -1183,7 +1217,7 @@ static bool filter_sample(const void *sample, void *arg) {
   if (value->kind != SDK_DATA) return true; /* Lifecycle samples contain keys only. */
   JNIEnv *env = NULL;
   bool attached = (*ctx->vm)->GetEnv(ctx->vm, (void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED;
-  if (attached && (*ctx->vm)->AttachCurrentThreadAsDaemon(ctx->vm, (void **) &env, NULL) != JNI_OK) return false;
+  if (attached && attach_daemon(ctx->vm, &env) != JNI_OK) return false;
   bool result = false;
   jbyteArray bytes = (*env)->NewByteArray(env, (jsize) value->size);
   if (bytes) {

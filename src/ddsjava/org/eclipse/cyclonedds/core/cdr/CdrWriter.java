@@ -19,8 +19,10 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /** XCDR1/XCDR2 writer. Parameter-list values have their own alignment origin. */
-public final class CdrWriter {
-    private ByteBuffer buffer = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN);
+public final class CdrWriter implements AutoCloseable {
+    private static final java.util.concurrent.ArrayBlockingQueue<ByteBuffer> BUFFERS = new java.util.concurrent.ArrayBlockingQueue<>(16);
+    private ByteBuffer buffer;
+    private final boolean pooled;
     private final int version;
     private int origin = 4;
     private final java.util.ArrayDeque<Integer> origins = new java.util.ArrayDeque<>();
@@ -34,15 +36,34 @@ public final class CdrWriter {
 
     public CdrWriter() { this(2); }
     public CdrWriter(int version) { this(version, ByteOrder.LITTLE_ENDIAN); }
-    public CdrWriter(int version, ByteOrder order) {
+    public CdrWriter(int version, ByteOrder order) { this(version, order, false); }
+    /** Borrow an operation-local buffer. Always close the writer, including on codec failure.
+     * The shared pool retains at most sixteen buffers of at most one MiB each. */
+    public static CdrWriter pooled(int version) { return new CdrWriter(version, ByteOrder.LITTLE_ENDIAN, true); }
+    private CdrWriter(int version, ByteOrder order, boolean pooled) {
         if (version != 1 && version != 2) throw new IllegalArgumentException("Expected XCDR version 1 or 2");
-        this.version = version; buffer.order(Objects.requireNonNull(order));
+        this.version = version; this.pooled = pooled;
+        Objects.requireNonNull(order);
+        buffer = pooled ? BUFFERS.poll() : null;
+        if (buffer == null) buffer = ByteBuffer.allocate(256);
+        buffer.clear().order(order);
         buffer.put(new byte[]{0, (byte)(version == 1 ? 0 : 6), 0, 0});
         if (order == ByteOrder.LITTLE_ENDIAN) buffer.put(1, (byte)(buffer.get(1) + 1));
     }
     public boolean isXcdr2() { return version == 2; }
 
+    private void requireOpen() { if (buffer == null) throw new IllegalStateException("CDR writer is closed"); }
+    @Override public void close() {
+        ByteBuffer previous = buffer;
+        if (previous == null) return;
+        buffer = null; activeValues.clear(); origins.clear();
+        if (pooled && previous.capacity() <= 1024 * 1024) {
+            Arrays.fill(previous.array(), 0, previous.position(), (byte) 0);
+            BUFFERS.offer(previous);
+        }
+    }
     private void reserve(int count, int alignment) {
+        requireOpen();
         int padding = (-(buffer.position() - origin)) & (alignment - 1);
         int required = Math.addExact(buffer.position(), Math.addExact(padding, count));
         if (required > buffer.capacity()) {
@@ -125,12 +146,13 @@ public final class CdrWriter {
         buffer.put(bytes);
     }
 
-    public byte[] toByteArray() { return Arrays.copyOf(buffer.array(), buffer.position()); }
+    public byte[] toByteArray() { requireOpen(); return Arrays.copyOf(buffer.array(), buffer.position()); }
     /** Start an XCDR2 delimited collection; finish with the returned position. */
     public int beginDelimited() { writeInt(0); return buffer.position(); }
     public int beginType(boolean appendable) { return beginType(appendable ? 1 : 0); }
     /** 0 = final, 1 = appendable, 2 = mutable. */
     public int beginType(int extensibility) {
+        requireOpen();
         if (extensibility < 0 || extensibility > 2) throw new IllegalArgumentException("Invalid extensibility");
         if (typeDepth >= 128) throw new IllegalArgumentException("IDL nesting exceeds 128 types");
         if (typeDepth++ == 0) buffer.put(1, (byte) ((isXcdr2() ? 6 + 2 * extensibility : extensibility == 2 ? 2 : 0)
@@ -161,6 +183,7 @@ public final class CdrWriter {
         typeDepth--;
     }
     public void endDelimited(int start) {
+        requireOpen();
         if (start < 8 || start > buffer.position()) throw new IllegalArgumentException("Invalid delimiter position");
         buffer.putInt(start - 4, buffer.position() - start);
     }

@@ -31,3 +31,7 @@ target_include_directories(psmx-typesupport PRIVATE "${PROJECT_SOURCE_DIR}/src/j
 target_link_libraries(psmx-typesupport PRIVATE interop-c-types CycloneDDS::ddsc)
 add_test(NAME psmx-typesupport COMMAND psmx-typesupport)
 set_tests_properties(psmx-typesupport PROPERTIES TIMEOUT 20)
+
+idlc_generate(TARGET parity-c-types FILES "${CMAKE_CURRENT_SOURCE_DIR}/idl/Parity.idl" DEFAULT_EXTENSIBILITY final)
+add_executable(parity-peer c/parity_peer.c)
+target_link_libraries(parity-peer PRIVATE parity-c-types CycloneDDS::ddsc)

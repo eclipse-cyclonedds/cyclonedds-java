@@ -260,3 +260,17 @@ are rejected rather than patched into the parser. Annotation members must use
 supported scalar/string/enum types.
 Long double, maps, bit sets/masks and other unimplemented IDL
 building blocks remain outside this provider's supported profile.
+
+Bit masks
+---------
+
+IDL bit masks generate immutable Java records backed by a ``long`` bit pattern.
+Each declared flag is a typed constant; ``or``, ``and`` and ``contains`` combine
+and test flags, and ``getValue``/``fromValue`` expose the underlying pattern.
+For a 64-bit mask, the high bit is represented by ``Long.MIN_VALUE``. Undefined
+flags are rejected. Widths from 1 through 64 bits use rounded 1/2/4/8-byte storage,
+with XCDR2 collection framing where required. Aliases, arrays, sequences, union
+branches, keys and optional members use the same codecs. The pinned core cannot
+encode optional bitmask members in XCDR1; those schemas advertise XCDR2 only.
+This mapping adds functional bitmask support and does not establish complete
+IDL4-Java conformance.

@@ -33,7 +33,7 @@ Implemented
   framing. Independent C peers test collection, union and appendable wire formats.
 * Next-sample operations using provider-owned samples, copied-list sample reuse,
   all topic/writer/reader status getters, status changes and liveliness assertion.
-* Standard listener callbacks with ancestor fallback, per-participant dispatch,
+* Standard listener callbacks with ancestor fallback, per-entity dispatch,
   immutable status snapshots and reader notification; query conditions with
   waitset-preserving parameter updates, SQL content selectors, content-filtered
   topics, native next-instance traversal, key-value reconstruction and validated
@@ -75,7 +75,7 @@ Remaining restrictions include participant-factory XML profiles, finite reader
 auto-purge timers, legacy exact-name/declared consistency modes, disabled entities, coherent/ordered access,
 external persistent/transient durability services.
 Enabled changes to matching policies remain restricted by the core and fail
-explicitly. More lifecycle combinations and distributed stress tests remain work.
+explicitly. Lifecycle races and resource retention now have a dedicated stress test; broader distributed stress tests remain work.
 
 Remaining IDL work
 ------------------
@@ -94,17 +94,28 @@ members and conflicting repeated annotations remain core parser limitations.
 TypeObject labels remain signed 32-bit by the XTypes specification.
 
 Remaining work includes non-scalar user annotations, broader aggregate recovery
-validation and unbounded non-tail appendable and direct appendable collection XCDR1 layouts. Bit sets/masks, maps and other IDL building blocks remain outside the
+validation and unbounded non-tail appendable and direct appendable collection XCDR1 layouts. Bit sets, maps and other IDL building blocks remain outside the
 current profile. Empty constructed sequence elements need additional bounds
 handling.
 Application types must continue to require no application-specific native library.
+
+Recent runtime parity work
+--------------------------
+
+Async unread-data futures with cancellation, per-entity callback isolation,
+coalesced availability notifications, retained listener failures, typed Java query
+predicates, combined write/dispose, bounded CDR buffer pooling and IDL bitmasks
+are implemented. A dedicated stress process validates native entity deletion,
+collectability, listener replacement, async cancellation and parent/child races.
+Independent C peers verify bitmask exchange in XCDR1/XCDR2. See :doc:`howtos/async`
+and :doc:`testing` for APIs and validation limits.
 
 Remaining release and validation work
 -------------------------------------
 
 Verify the configured Linux x86-64/ARM64, macOS ARM64 and Windows x86-64 CI. Provide a
 published Maven/Gradle generator/native workflow, reproducible archives and
-sanitizer/stress runs. The standalone runtime JAR bundles the matching core/JNI libraries; code
+sanitizer and longer distributed stress runs. The standalone runtime JAR bundles the matching core/JNI libraries; code
 generation uses the separate ``org.eclipse.cyclonedds.idlc`` package, including
 its platform libraries and Maven goal. The runtime artifact is
 ``org.eclipse.cyclonedds``; both use the core version.

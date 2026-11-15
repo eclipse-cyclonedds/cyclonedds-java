@@ -54,8 +54,12 @@ public final class Native {
     public static native void dispose(int writer, long instance, boolean unregister, long timestamp);
     public static native void waitForAcks(int entity, long timeoutNanos);
     public static native void delete(int entity);
+    /** Native ownership diagnostics, also used by the resource stress test. */
+    public static native int entityParent(int entity);
+    public static native int[] entityChildren(int entity);
     public static native void flush(int writer);
     public static native void write(int writer, byte[] cdr);
+    public static native void writeDispose(int writer, byte[] cdr, long timestamp);
     public static native void writeAt(int writer, byte[] cdr, long timestamp);
     public static native WireSample[] take(int reader, int maxSamples);
     public static native WireSample[] read(int reader, int maxSamples);

@@ -11,7 +11,7 @@
 @PACKAGE_INIT@
 set(_CycloneDDSJava_PREFIX "${PACKAGE_PREFIX_DIR}")
 include(CMakeFindDependencyMacro)
-find_dependency(CycloneDDS @PROJECT_VERSION@ EXACT)
+find_dependency(CycloneDDS @CycloneDDS_VERSION@ EXACT)
 find_dependency(Java 17 COMPONENTS Development)
 include("${CMAKE_CURRENT_LIST_DIR}/CycloneDDSJavaTargets.cmake")
 set(CycloneDDSJava_RUNTIME_JAR "${_CycloneDDSJava_PREFIX}/share/java/org.eclipse.cyclonedds.jar")

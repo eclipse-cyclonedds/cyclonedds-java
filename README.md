@@ -80,7 +80,7 @@ Use JDK 17+ and Maven 3.9+.
 
 No platform classifier or OS profiles are needed in the POM. The universal
 release build requires Linux on x86-64 and ARM64, macOS on ARM64, and Windows on
-x86-64. Its build matrix
+x86-64 and ARM64. Its build matrix
 combines the native outputs and tests the identical runtime/compiler pair on each host. A local
 CMake build includes the local host by default; building that JAR alone does not
 produce binaries for other systems. See
@@ -150,12 +150,15 @@ libraries automatically; application code needs no native search-path setup.
 ## Build the package from source
 
 Requirements: JDK 17+, CMake 3.21+, a C11 compiler and a Cyclone DDS installation
-with `idlc`, IDL/DDSI development headers and type-library support. The tested core
-revision is the unmodified `3a5526315e64ac1d2a52e6ac1ae7f3e861c593d3` (11.0.1).
-No Cyclone DDS core patches are required. Build that core first:
+with `idlc`, IDL/DDSI development headers and type-library support.
+Branch and pull-request CI builds use the latest Cyclone DDS `master`; Java tag
+builds use the exact same tag in the C core repository and fail if it is missing.
+The selected core commit is resolved once per workflow for all platforms.
+No Cyclone DDS core patches are required. Build the core first:
 
 ```sh
-git clone https://github.com/eclipse-cyclonedds/cyclonedds.git core
+git clone --branch master https://github.com/eclipse-cyclonedds/cyclonedds.git core
+# For a release, use --branch <same-tag-as-java> instead.
 cmake -S core -B core-build -DCMAKE_INSTALL_PREFIX="$PWD/core-install" \
   -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DENABLE_SECURITY=OFF -DENABLE_SSL=OFF
 cmake --build core-build --parallel
@@ -177,7 +180,7 @@ per-platform assembly inputs, thin development JARs, JNI runtime and IDL backend
 checksums. Nothing is published automatically. The tests cover wire formats,
 standard API behavior, three independent C interoperability paths, a Java-only
 installed consumer, and bundled-native loading with native search paths disabled.
-Local validation is macOS ARM64; Linux, macOS ARM64 and Windows x86-64 CI is configured.
+Local validation is macOS ARM64; Linux x86-64/ARM64, macOS ARM64 and Windows x86-64/ARM64 CI is configured.
 
 To build and install the Maven artifacts locally, make Maven available when
 configuring CMake, then run:
@@ -190,3 +193,14 @@ This installs `org.eclipse.cyclonedds` (runtime) and `org.eclipse.cyclonedds.idl
 (compiler plus Maven integration) into the local Maven repository. It does not
 publish to a remote repository. See [Maven packaging and validation](docs/manual/maven.rst)
 and [distribution details](docs/manual/distribution.rst).
+
+## Mobile CI
+
+Android JNI is cross-built for ARM64, x86-64, ARMv7 and x86 using NDK
+27.2.12479018 (API 28), with ELF architecture and 16 KB alignment checks. Separate
+`android-jni-<abi>` workflow artifacts contain native libraries and notices.
+These are experimental native builds; Android Java integration and runtime tests
+are still needed. They are not included in the desktop universal JARs.
+
+iOS ARM64 needs a Java/AOT runtime integration that this JNI project does not yet
+provide. See [mobile build details](docs/manual/distribution.rst).

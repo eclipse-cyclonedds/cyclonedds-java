@@ -15,40 +15,79 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  ANDROID_NDK_VERSION: 27.2.12479018
 jobs:
+  prepare:
+    name: Select Cyclone DDS core
+    runs-on: ubuntu-24.04
+    outputs:
+      core-commit: ${{ steps.core.outputs.commit }}
+    steps:
+      - name: Check out latest master or matching release tag
+        uses: actions/checkout@v7
+        with:
+          repository: eclipse-cyclonedds/cyclonedds
+          ref: ${{ github.ref_type == 'tag' && format('refs/tags/{0}', github.ref_name) || 'refs/heads/master' }}
+      - name: Record core commit for all platform builds
+        id: core
+        shell: bash
+        run: |
+          COMMIT=$(git rev-parse HEAD)
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Cyclone DDS core: $COMMIT"
   platform:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: ubuntu-24.04
             platform: linux-x86_64
+            arch: x64
           - runner: ubuntu-24.04-arm
             platform: linux-aarch64
+            arch: aarch64
           - runner: macos-15
             platform: macos-aarch64
-          - runner: windows-2022
+            arch: aarch64
+          - runner: windows-2025
             platform: windows-x86_64
+            arch: x64
+            msvc_arch: amd64
+          - runner: windows-11-arm
+            platform: windows-aarch64
+            arch: aarch64
+            msvc_arch: arm64
+    timeout-minutes: 35
     runs-on: ${{ matrix.runner }}
     env:
-      CMAKE_GENERATOR: ${{ matrix.platform == 'windows-x86_64' && 'Ninja' || 'Unix Makefiles' }}
+      CMAKE_GENERATOR: ${{ startsWith(matrix.platform, 'windows-') && 'Ninja' || 'Unix Makefiles' }}
       CMAKE_BUILD_TYPE: Release
+      CYCLONEDDS_CORE_COMMIT: ${{ needs.prepare.outputs.core-commit }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
-          distribution: temurin
+          # Temurin 17 has no Windows ARM64 build; keep Java 17 with Microsoft's native JDK.
+          distribution: ${{ matrix.runner == 'windows-11-arm' && 'microsoft' || 'temurin' }}
           java-version: '17'
-      - name: Configure MSVC for x86-64
+          architecture: ${{ matrix.arch }}
+      - name: Configure native MSVC
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          MSVC_ARCH: ${{ matrix.msvc_arch }}
         run: |
           $before = @{}
           Get-ChildItem Env: | ForEach-Object { $before[$_.Name] = $_.Value }
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.${{ matrix.msvc_arch == 'arm64' && 'ARM64' || 'x86.x64' }} -property installationPath
           if (-not $installation) { throw 'Visual Studio C++ tools were not found' }
-          & "$installation\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          & "$installation\Common7\Tools\Launch-VsDevShell.ps1" -Arch $env:MSVC_ARCH -HostArch $env:MSVC_ARCH -SkipAutomaticLocation
           Get-ChildItem Env: | Where-Object { $before[$_.Name] -cne $_.Value } | ForEach-Object {
               "$($_.Name)=$($_.Value)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           }
@@ -64,7 +103,7 @@ jobs:
           def run(*args):
               subprocess.run(list(map(str, args)), check=True)
           run("git", "clone", "https://github.com/eclipse-cyclonedds/cyclonedds.git", source)
-          run("git", "-C", source, "checkout", "3a5526315e64ac1d2a52e6ac1ae7f3e861c593d3")
+          run("git", "-C", source, "checkout", os.environ["CYCLONEDDS_CORE_COMMIT"])
           run("cmake", "-S", source, "-B", build, "-DCMAKE_INSTALL_PREFIX=" + install.as_posix(),
               "-DBUILD_TESTING=OFF", "-DBUILD_EXAMPLES=OFF", "-DENABLE_SECURITY=OFF", "-DENABLE_SSL=OFF")
           run("cmake", "--build", build, "--parallel", "4")
@@ -109,6 +148,16 @@ jobs:
                   message = (case.attrib["name"] + "\n" + output)[-12000:]
                   message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
                   print("::error::" + message)
+      - name: Save test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostics-${{ matrix.platform }}
+          path: |
+            build/Testing/Temporary/*.log
+            build/test-results.xml
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
           name: platform-${{ matrix.platform }}
@@ -137,7 +186,7 @@ jobs:
             java -cp "platform-inputs/platform-linux-x86_64/org.eclipse.cyclonedds.idlc-${VERSION}-linux-x86_64.jar" \
               org.eclipse.cyclonedds.idlc.UniversalJar --kind "$KIND" \
               --output "dist/${ARTIFACT}-${VERSION}.jar" --version "$VERSION" \
-              --platforms linux-x86_64,linux-aarch64,macos-aarch64,windows-x86_64 --input-dir platform-inputs
+              --platforms linux-x86_64,linux-aarch64,macos-aarch64,windows-x86_64,windows-aarch64 --input-dir platform-inputs
           done
           mvn -B -ntp -f maven/pom.xml \
             "-Dcyclonedds.runtime.jar=$PWD/dist/org.eclipse.cyclonedds-${VERSION}.jar" \
@@ -156,14 +205,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2022]
+        include:
+          - runner: ubuntu-24.04
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+          - runner: macos-15
+            arch: aarch64
+          - runner: windows-2025
+            arch: x64
+          - runner: windows-11-arm
+            arch: aarch64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
-          distribution: temurin
+          # Temurin 17 has no Windows ARM64 build; keep Java 17 with Microsoft's native JDK.
+          distribution: ${{ matrix.runner == 'windows-11-arm' && 'microsoft' || 'temurin' }}
           java-version: '17'
+          architecture: ${{ matrix.arch }}
       - uses: actions/download-artifact@v8
         with:
           name: universal-java
@@ -183,3 +244,37 @@ jobs:
           subprocess.run([sys.executable, "tests/idlc_bundle.py", str(java / "java"), str(java / "javac"),
                           str(root / "release" / f"org.eclipse.cyclonedds.idlc-{version}.jar"),
                           str(root / "release" / f"org.eclipse.cyclonedds-{version}.jar"), str(root)], check=True)
+
+  android:
+    needs: prepare
+    name: Cross-build Android JNI (${{ matrix.abi }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64, armeabi-v7a, x86]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ndk;${{ env.ANDROID_NDK_VERSION }}
+      - name: Cross-build and verify native runtime
+        env:
+          ANDROID_ABI: ${{ matrix.abi }}
+          CYCLONEDDS_CORE_COMMIT: ${{ needs.prepare.outputs.core-commit }}
+        shell: bash
+        run: >-
+          python3 scripts/build-android.py
+          --ndk "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          --abi "$ANDROID_ABI"
+          --ref "$CYCLONEDDS_CORE_COMMIT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-jni-${{ matrix.abi }}
+          path: build/android/${{ matrix.abi }}/package/
+          if-no-files-found: error

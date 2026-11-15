@@ -92,6 +92,7 @@ final class Conditions {
             resource = new Resource(env, handle, true); this.reader = reader; this.state = state; this.onClose = onClose;
         }
         public Resource resource() { return resource; }
+        int stateMask() { return state.mask(); }
         public ServiceEnvironment getEnvironment() { return resource.env; }
         public boolean getTriggerValue() { resource.handle(); return state.mask() != 0 && resource.triggered(); }
         public Set<SampleState> getSampleStates() { resource.handle(); return state.getSampleStates(); }

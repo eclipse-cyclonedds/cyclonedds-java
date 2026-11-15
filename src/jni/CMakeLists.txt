@@ -8,7 +8,12 @@
 #
 # SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
 
-find_package(JNI REQUIRED)
+if(ANDROID)
+  # JNI headers are part of the NDK sysroot; never use host JDK/JVM libraries.
+  set(JNI_INCLUDE_DIRS "")
+else()
+  find_package(JNI REQUIRED)
+endif()
 
 add_library(cycloneddsjava SHARED bridge.c typesupport.c)
 set_target_properties(cycloneddsjava PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
@@ -23,4 +28,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 add_library(CycloneDDSJava::cycloneddsjava ALIAS cycloneddsjava)
-install(TARGETS cycloneddsjava EXPORT CycloneDDSJavaTargets LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+if(BUILD_NATIVE_ONLY)
+  install(TARGETS cycloneddsjava LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+else()
+  install(TARGETS cycloneddsjava EXPORT CycloneDDSJavaTargets LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+endif()

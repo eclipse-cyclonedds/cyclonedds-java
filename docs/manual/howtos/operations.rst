@@ -161,13 +161,16 @@ For example:
    };
    reader.setListener(listener, Set.of(DataAvailableStatus.class));
 
-Callbacks run serially on one daemon dispatcher per participant. Native callbacks
-only queue event data; user code runs outside native callbacks and participant
-monitors. A callback may read, take, write or close an entity, including itself.
-Return promptly and do not wait for another callback on the same participant.
-Callback exceptions go to the dispatch thread's uncaught-exception handler;
-subsequent callbacks continue. Install a default handler if your application needs
-to collect these failures.
+Callbacks run serially per originating entity on shared daemon workers. Different
+endpoints dispatch independently, including endpoints in the same participant.
+Native callbacks only queue event data; user code runs outside native callbacks
+and participant monitors. A callback may read, take, write or close an entity,
+including itself. Return promptly and do not wait for another callback on the same
+entity. Ancestor listeners must handle concurrent callbacks from different sources.
+DataAvailable and DataOnReaders notifications are coalesced while pending.
+Callback exceptions go to the dispatch thread's uncaught-exception handler and
+are retained by ``CycloneEntities.getLastListenerException(source)``; subsequent
+callbacks continue. See :doc:`async` for async waits and typed predicate helpers.
 
 Masks determine which events a listener handles. A missing or disabled handler
 falls back to the enclosing subscriber/publisher and participant. Event sources
@@ -179,7 +182,7 @@ using native status flags because the core's notification function is a stub.
 Listener replacement and closure cancel queued events for the affected dispatch
 targets. A callback already running may finish after another thread closes its
 entity; subsequent DDS calls then raise ``AlreadyClosedException``. Closing the
-participant shuts down its dispatcher without waiting on application callbacks.
+participant cancels its pending deliveries without waiting on application callbacks.
 Data-available events are notifications to drain available data, not a promise
 of one callback per sample.
 

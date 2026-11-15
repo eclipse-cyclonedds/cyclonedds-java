@@ -155,9 +155,12 @@ IDL4-Java mapping coverage
    * - Aliases/modules
      - Scalar/array aliases; modules form packages with runtime annotations; constants containers
      - Complete nested declarations and non-scalar user annotations
+   * - Bit masks (vendor mapping)
+     - Immutable typed records, declared flags and combinations, rounded 1/2/4/8-byte XCDR storage, arrays/sequences/unions and optional XCDR2 members
+     - Normative mapping conformance is not claimed; optional bitmask XCDR1 is restricted by the pinned core
    * - Other building blocks
      - Unsupported input is rejected
-     - Bit sets/masks, maps, fixed-point, interface/value/component mappings
+     - Bit sets, maps, fixed-point, interface/value/component mappings
 
 
 The primitive-sequence pseudocode in IDL4-Java contains Java-incompatible forms,

@@ -1,0 +1,35 @@
+/*
+ * Copyright(c) 2026 Sven Trittler
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v. 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0, or the Eclipse Distribution License
+ * v. 1.0 which is available at
+ * http://www.eclipse.org/org/documents/edl-v10.php.
+ *
+ * SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
+*/
+
+module Parity {
+  @bit_bound(1) bitmask One { @position(0) SET };
+  @bit_bound(5) bitmask Small { @position(0) FIRST, @position(4) LAST };
+  @bit_bound(8) bitmask Flags8 { @position(0) LOW8, @position(7) HIGH8 };
+  @bit_bound(16) bitmask Flags16 { @position(0) LOW16, @position(15) HIGH16 };
+  @bit_bound(32) bitmask Flags32 { @position(0) LOW32, @position(31) HIGH32 };
+  @bit_bound(64) bitmask Flags64 { @position(0) LOW64, @position(63) HIGH64 };
+  typedef Flags16 FlagAlias;
+  @final union Choice switch (long) { case 1: Flags64 mask; default: Flags8 small; };
+  @final struct Masks {
+    @key long id;
+    One one;
+    Small small;
+    Flags8 byteFlags;
+    FlagAlias shortFlags;
+    Flags32 intFlags;
+    Flags64 longFlags;
+    Flags8 fixedFlags[2];
+    sequence<Flags16, 8> flags;
+    Choice choice;
+  };
+  @final struct OptionalMask { @key long id; @optional Flags64 extra; };
+};

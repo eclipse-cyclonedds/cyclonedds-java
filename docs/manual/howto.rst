@@ -19,4 +19,5 @@ How-to guides
    howtos/waitset
    howtos/qos
    howtos/operations
+   howtos/async
    howtos/idl
