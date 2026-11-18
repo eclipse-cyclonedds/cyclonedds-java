@@ -16,6 +16,8 @@ Ergebnisse und Messgrenzen: [Schritt-1-Bericht](sequence-preallocation-results.m
 
 Schritt 2 ist im Arbeitsstand umgesetzt: kompakte ByteSeq und blockweise CDR-Verarbeitung, verbindlich als Generator-Standard ohne Legacy-Option. Die vollständige Suite bestand mit 108 Tests. Alle fünf 1-GB-Prozesse bestanden die Messung mit 8 GiB Heap. Der frische Vergleich liegt je nach Größe noch bei 1,82–4,81× der C#-Zeit; das Zeitziel ist deshalb noch nicht erreicht. [Schritt-2-Ergebnisse](packed-byte-sequence-results.md).
 
+Schritt 3 ist im Arbeitsstand umgesetzt: direkte Übergabe des genutzten CDR-Puffers, weniger JNI-Zwischenpuffer und keine zusätzliche CDR-Payload im dekodierten OMG-Sample. 109 Tests bestanden. Der frische Vergleich liegt je nach Größe bei 1,18–2,09× C#; das Zeitziel ist bei 164 KiB erreicht. [Kopierpfad, Teilmessungen und Ergebnisse](cdr-copy-reduction-results.md).
+
 ## Vorgeschlagene Abnahmekriterien
 
 Diese Werte sind Entwicklungsziele, keine zugesagten Ergebnisse:

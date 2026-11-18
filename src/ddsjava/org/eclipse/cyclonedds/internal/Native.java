@@ -61,6 +61,8 @@ public final class Native {
     public static native void write(int writer, byte[] cdr);
     public static native void writeDispose(int writer, byte[] cdr, long timestamp);
     public static native void writeAt(int writer, byte[] cdr, long timestamp);
+    /** Synchronously copies the used prefix into DDS-owned storage; the array is not retained. */
+    public static native void writeCdr(int writer, byte[] cdr, int length, long timestamp, boolean dispose);
     public static native WireSample[] take(int reader, int maxSamples);
     public static native WireSample[] read(int reader, int maxSamples);
     public static native WireSample[] select(int reader, int maxSamples, boolean take, int stateMask, long instance);

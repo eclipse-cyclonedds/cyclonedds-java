@@ -17,4 +17,10 @@ public record WireSample(byte[] cdr, boolean validData, long sourceTimestamp,
                          long publicationHandle, int disposedGenerationCount, int noWritersGenerationCount,
                          int sampleRank, int generationRank, int absoluteGenerationRank) implements java.io.Serializable {
     private static final long serialVersionUID = 1L;
+    /** Metadata remains useful after decoding; the serialized payload does not need to stay live. */
+    public WireSample withoutCdr() {
+        return cdr == null ? this : new WireSample(null, validData, sourceTimestamp, instanceHandle,
+            instanceState, sampleState, viewState, publicationHandle, disposedGenerationCount,
+            noWritersGenerationCount, sampleRank, generationRank, absoluteGenerationRank);
+    }
 }

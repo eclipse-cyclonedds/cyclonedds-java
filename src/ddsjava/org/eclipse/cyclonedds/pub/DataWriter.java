@@ -30,7 +30,7 @@ public final class DataWriter<T> extends Entity {
             requireOpen();
             try (CdrWriter cdr = CdrWriter.pooled(2)) {
                 codec.write(cdr, Objects.requireNonNull(value));
-                Native.write(handle, cdr.toByteArray());
+                cdr.writeTo(handle, -1, false);
             }
         }
     }
@@ -39,7 +39,7 @@ public final class DataWriter<T> extends Entity {
             requireOpen();
             try (CdrWriter cdr = CdrWriter.pooled(2)) {
                 codec.write(cdr, Objects.requireNonNull(value));
-                Native.writeDispose(handle, cdr.toByteArray(), -1);
+                cdr.writeTo(handle, -1, true);
             }
         }
     }

@@ -118,7 +118,7 @@ final class Entities {
         synchronized (s.root) {
             s.requireOpen();
             if (s.kind != Kind.WRITER) throw new IllegalArgumentException("Expected a DataWriter");
-            try { Native.writeDispose(s.handle, s.encode(value), timestamp); }
+            try (var cdr = s.encodeBuffer(value)) { cdr.writeTo(s.handle, timestamp, true); }
             catch (DdsException error) { throw Errors.unchecked(s.env, error); }
         }
     }
@@ -555,13 +555,19 @@ final class Entities {
             }
             return null;
         }
-        @SuppressWarnings("unchecked") private byte[] encode(Object value) {
+        @SuppressWarnings("unchecked") private CdrWriter encodeBuffer(Object value) {
             type.getType().cast(Objects.requireNonNull(value));
             var representation = (DataRepresentation) qos.get(DataRepresentation.class);
-            try (var cdr = CdrWriter.pooled(kind == Kind.WRITER && representation != null && representation.getValue().get(0) == 0 ? 1 : 2)) {
+            var cdr = CdrWriter.pooled(kind == Kind.WRITER && representation != null && representation.getValue().get(0) == 0 ? 1 : 2);
+            try {
                 ((CycloneTypeSupport<Object>) type).binding().codec().write(cdr, value);
-                return cdr.toByteArray();
+                return cdr;
+            } catch (RuntimeException | Error error) {
+                cdr.close(); throw error;
             }
+        }
+        private byte[] encode(Object value) {
+            try (var cdr = encodeBuffer(value)) { return cdr.toByteArray(); }
         }
         @SuppressWarnings("unchecked") private Object keyValue(Object[] args) throws ReflectiveOperationException {
             if (builtinKind != 0) {
@@ -595,16 +601,17 @@ final class Entities {
             return Values.nanos(value, (TimeUnit) args[offset + 1]);
         }
         private void write(Object[] args) {
-            byte[] cdr = encode(args[0]);
-            int offset = 1;
-            if (args.length > 1 && args[1] instanceof InstanceHandle instance) {
-                long expected = Values.handleValue(instance, env);
-                if (expected != 0 && Native.instanceOperation(handle, cdr, false) != expected)
-                    throw new Errors.Precondition(env, "Instance handle does not identify this sample");
-                offset++;
+            try (var cdr = encodeBuffer(args[0])) {
+                int offset = 1;
+                if (args.length > 1 && args[1] instanceof InstanceHandle instance) {
+                    long expected = Values.handleValue(instance, env);
+                    if (expected != 0 && Native.instanceOperation(handle, cdr.toByteArray(), false) != expected)
+                        throw new Errors.Precondition(env, "Instance handle does not identify this sample");
+                    offset++;
+                }
+                long time = timestamp(args, offset);
+                cdr.writeTo(handle, time, false);
             }
-            long time = timestamp(args, offset);
-            if (time < 0) Native.write(handle, cdr); else Native.writeAt(handle, cdr, time);
         }
         private void dispose(Object[] args, boolean unregister) {
             long instance = Values.handleValue((InstanceHandle) args[0], env);

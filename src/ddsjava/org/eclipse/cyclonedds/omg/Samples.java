@@ -31,7 +31,7 @@ final class Samples {
         private T value;
         private WireSample info;
         Data(ServiceEnvironment env, TypeSupport.Codec<T> codec, T value, WireSample info) {
-            this.env = env; this.codec = codec; this.value = value; this.info = info;
+            this.env = env; this.codec = codec; this.value = value; this.info = info.withoutCdr();
         }
         public ServiceEnvironment getEnvironment() { return env; }
         boolean ownedBy(ServiceEnvironment owner, TypeSupport.Codec<?> expected) { return env == owner && codec == expected; }

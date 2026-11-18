@@ -24,4 +24,8 @@ dds_entity_t java_create_topic(dds_entity_t participant, const char *topic_name,
     const char *type_name, bool has_key, uint32_t representations, const unsigned char *info, uint32_t info_size,
     const unsigned char *map, uint32_t map_size, const dds_qos_t *qos);
 bool java_merge_key(const struct ddsi_sertype *type, const struct java_sample *key, struct java_sample *value);
+/* Fills DDS-owned CDR storage directly, then applies the usual validation and key extraction.
+   The callback must initialize every byte and must not retain the destination pointer. */
+struct ddsi_serdata *java_serdata_from_buffer(const struct ddsi_sertype *type, size_t size,
+    bool (*fill)(unsigned char *destination, void *arg), void *arg);
 #endif

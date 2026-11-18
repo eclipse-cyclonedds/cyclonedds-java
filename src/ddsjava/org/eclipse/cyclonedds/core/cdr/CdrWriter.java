@@ -153,6 +153,11 @@ public final class CdrWriter implements AutoCloseable {
     }
 
     public byte[] toByteArray() { requireOpen(); return Arrays.copyOf(buffer.array(), buffer.position()); }
+    /** Internal synchronous handoff. The buffer remains exclusively owned until this returns. */
+    public void writeTo(int writer, long timestamp, boolean dispose) {
+        requireOpen();
+        org.eclipse.cyclonedds.internal.Native.writeCdr(writer, buffer.array(), buffer.position(), timestamp, dispose);
+    }
     /** Start an XCDR2 delimited collection; finish with the returned position. */
     public int beginDelimited() { writeInt(0); return buffer.position(); }
     public int beginType(boolean appendable) { return beginType(appendable ? 1 : 0); }

@@ -136,6 +136,14 @@ invalid:
   return NULL;
 }
 
+struct ddsi_serdata *java_serdata_from_buffer(const struct ddsi_sertype *type, size_t size,
+    bool (*fill)(unsigned char *destination, void *arg), void *arg) {
+  struct java_data *d = new_data(type, SDK_DATA, size);
+  if (!d) return NULL;
+  if (!fill(d->bytes, arg)) { data_free(&d->base); return NULL; }
+  return finish_data(d);
+}
+
 static struct ddsi_serdata *from_iov(const struct ddsi_sertype *type, enum ddsi_serdata_kind kind,
     ddsrt_msg_iovlen_t count, const ddsrt_iovec_t *iov, size_t size) {
   struct java_data *d = new_data(type, kind, size);

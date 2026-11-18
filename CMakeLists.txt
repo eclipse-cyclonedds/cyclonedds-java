@@ -243,6 +243,8 @@ if(BUILD_TESTING)
   endforeach()
   add_test(NAME cdr COMMAND ${Java_JAVA_EXECUTABLE} -ea -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.CdrTest)
   add_test(NAME packed-byte-sequence COMMAND ${Java_JAVA_EXECUTABLE} -ea -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.PackedByteSequenceTest)
+  add_test(NAME cdr-transfer COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni
+    "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>" -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.CdrTransferTest)
   foreach(recursive_case optional-self optional-array optional-external external-union mutual-sequence
       optional-sequence optional-typedef-sequence)
     add_test(NAME "upstream-recursive-${recursive_case}" COMMAND ${Java_JAVA_EXECUTABLE} -ea

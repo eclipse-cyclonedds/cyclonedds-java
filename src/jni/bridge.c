@@ -330,17 +330,22 @@ JNIEXPORT jintArray JNICALL JNI_METHOD(entityChildren)(JNIEnv *env, jclass cls, 
   free(children); return result;
 }
 
-static void write_cdr(JNIEnv *env, jint writer, jbyteArray bytes, jlong timestamp, bool dispose) {
+struct java_cdr_input { JNIEnv *env; jbyteArray bytes; jint size; };
+static bool fill_java_cdr(unsigned char *destination, void *arg) {
+  struct java_cdr_input *input = arg;
+  (*input->env)->GetByteArrayRegion(input->env, input->bytes, 0, input->size, (jbyte *) destination);
+  return !(*input->env)->ExceptionCheck(input->env);
+}
+
+static void write_cdr(JNIEnv *env, jint writer, jbyteArray bytes, jint size, jlong timestamp, bool dispose) {
+  if (!bytes || size < 4 || size > (*env)->GetArrayLength(env, bytes)) {
+    fail(env, "CDR buffer length", DDS_RETCODE_BAD_PARAMETER); return;
+  }
   const struct ddsi_sertype *type;
   dds_return_t rc = dds_get_entity_sertype(writer, &type);
   if (rc < 0) { fail(env, "dds_get_entity_sertype", rc); return; }
-  jsize size = (*env)->GetArrayLength(env, bytes);
-  if (size < 4) { fail(env, "CDR encapsulation", DDS_RETCODE_BAD_PARAMETER); return; }
-  jbyte *data = (*env)->GetByteArrayElements(env, bytes, NULL);
-  if (!data) return;
-  ddsrt_iovec_t iov = {.iov_base = data, .iov_len = (size_t) size};
-  struct ddsi_serdata *sample = ddsi_serdata_from_ser_iov(type, SDK_DATA, 1, &iov, (size_t) size);
-  (*env)->ReleaseByteArrayElements(env, bytes, data, JNI_ABORT);
+  struct java_cdr_input input = {env, bytes, size};
+  struct ddsi_serdata *sample = java_serdata_from_buffer(type, (size_t) size, fill_java_cdr, &input);
   if (!sample) { fail(env, "Validate serialized sample", DDS_RETCODE_BAD_PARAMETER); return; }
   /* writecdr consumes one reference once the writer is locked. Java serializes deletion
      with writes and never installs topic filters, so early failure paths cannot occur. */
@@ -354,13 +359,18 @@ static void write_cdr(JNIEnv *env, jint writer, jbyteArray bytes, jlong timestam
 }
 
 JNIEXPORT void JNICALL JNI_METHOD(write)(JNIEnv *env, jclass cls, jint writer, jbyteArray bytes) {
-  UNUSED_CLASS; write_cdr(env, writer, bytes, -1, false);
+  UNUSED_CLASS; write_cdr(env, writer, bytes, bytes ? (*env)->GetArrayLength(env, bytes) : 0, -1, false);
 }
 JNIEXPORT void JNICALL JNI_METHOD(writeDispose)(JNIEnv *env, jclass cls, jint writer, jbyteArray bytes, jlong timestamp) {
-  UNUSED_CLASS; write_cdr(env, writer, bytes, timestamp, true);
+  UNUSED_CLASS; write_cdr(env, writer, bytes, bytes ? (*env)->GetArrayLength(env, bytes) : 0, timestamp, true);
 }
 JNIEXPORT void JNICALL JNI_METHOD(writeAt)(JNIEnv *env, jclass cls, jint writer, jbyteArray bytes, jlong timestamp) {
-  UNUSED_CLASS; write_cdr(env, writer, bytes, timestamp, false);
+  UNUSED_CLASS; write_cdr(env, writer, bytes, bytes ? (*env)->GetArrayLength(env, bytes) : 0, timestamp, false);
+}
+
+JNIEXPORT void JNICALL JNI_METHOD(writeCdr)(JNIEnv *env, jclass cls, jint writer, jbyteArray bytes,
+    jint size, jlong timestamp, jboolean dispose) {
+  UNUSED_CLASS; write_cdr(env, writer, bytes, size, timestamp, dispose != JNI_FALSE);
 }
 
 struct collected_samples { struct ddsi_serdata **samples; dds_sample_info_t *infos; uint32_t count; const struct ddsi_sertype **types; };
@@ -405,10 +415,15 @@ static jobjectArray read_samples(JNIEnv *env, jint reader, jint max_samples, boo
       if (size > INT_MAX) { fail(env, "Sample exceeds Java array limit", DDS_RETCODE_OUT_OF_RESOURCES); break; }
       bytes = (*env)->NewByteArray(env, (jsize) size);
       if (!bytes) break;
-      jbyte *data = (*env)->GetByteArrayElements(env, bytes, NULL);
-      if (!data) { (*env)->DeleteLocalRef(env, bytes); break; }
-      ddsi_serdata_to_ser(samples[i], 0, size, data);
-      (*env)->ReleaseByteArrayElements(env, bytes, data, 0);
+      ddsrt_iovec_t ref;
+      struct ddsi_serdata *lease = ddsi_serdata_to_ser_ref(samples[i], 0, size, &ref);
+      if (!lease) {
+        (*env)->DeleteLocalRef(env, bytes);
+        fail(env, "Borrow serialized sample", DDS_RETCODE_OUT_OF_RESOURCES); break;
+      }
+      (*env)->SetByteArrayRegion(env, bytes, 0, (jsize) size, (const jbyte *) ref.iov_base);
+      ddsi_serdata_to_ser_unref(lease, &ref);
+      if ((*env)->ExceptionCheck(env)) { (*env)->DeleteLocalRef(env, bytes); break; }
     }
     jobject sample = (*env)->NewObject(env, type, constructor, bytes, (jboolean) infos[i].valid_data,
         (jlong) infos[i].source_timestamp, (jlong) infos[i].instance_handle, (jint) infos[i].instance_state,
