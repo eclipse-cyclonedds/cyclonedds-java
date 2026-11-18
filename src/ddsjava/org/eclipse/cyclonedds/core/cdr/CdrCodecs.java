@@ -123,6 +123,10 @@ public final class CdrCodecs {
         return new Codec<>() {
             public void write(CdrWriter w, L values) {
                 w.writeSequenceLength(values.size(), bound);
+                if (element == BYTE && values instanceof org.eclipse.cyclonedds.type.seq.PackedByteSequence bytes) {
+                    w.writeByteBlock(bytes);
+                    return;
+                }
                 for (T value : values) element.write(w, Objects.requireNonNull(value));
             }
             public L read(CdrReader r) {
@@ -130,6 +134,11 @@ public final class CdrCodecs {
                 int count = r.readSequenceLength(bound, width);
                 int limit = r.sequenceLimit(count, bound);
                 L values = factory.get();
+                if (element == BYTE && values instanceof org.eclipse.cyclonedds.type.seq.PackedByteSequence bytes) {
+                    if (count != 0) r.prepareElement();
+                    r.readByteBlock(bytes, count, limit);
+                    return values;
+                }
                 // Reserve only retained elements, after validating the wire length and recovery limit.
                 if (values instanceof ArrayList<?> list) list.ensureCapacity(limit);
                 for (int i = 0; i < count; i++) { r.prepareElement(); T value = element.read(r); if (i < limit) values.add(value); }

@@ -242,6 +242,7 @@ if(BUILD_TESTING)
     set_tests_properties("upstream-${reader_case}" PROPERTIES TIMEOUT 30 RESOURCE_LOCK upstream-reader-domain)
   endforeach()
   add_test(NAME cdr COMMAND ${Java_JAVA_EXECUTABLE} -ea -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.CdrTest)
+  add_test(NAME packed-byte-sequence COMMAND ${Java_JAVA_EXECUTABLE} -ea -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.PackedByteSequenceTest)
   foreach(recursive_case optional-self optional-array optional-external external-union mutual-sequence
       optional-sequence optional-typedef-sequence)
     add_test(NAME "upstream-recursive-${recursive_case}" COMMAND ${Java_JAVA_EXECUTABLE} -ea

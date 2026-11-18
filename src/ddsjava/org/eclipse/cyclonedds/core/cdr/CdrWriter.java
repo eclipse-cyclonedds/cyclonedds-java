@@ -146,6 +146,12 @@ public final class CdrWriter implements AutoCloseable {
         buffer.put(bytes);
     }
 
+    /** Writes byte elements after a separately validated sequence length. */
+    public void writeByteBlock(org.eclipse.cyclonedds.type.seq.PackedByteSequence bytes) {
+        reserve(bytes.size(), 1);
+        bytes.copyTo(buffer);
+    }
+
     public byte[] toByteArray() { requireOpen(); return Arrays.copyOf(buffer.array(), buffer.position()); }
     /** Start an XCDR2 delimited collection; finish with the returned position. */
     public int beginDelimited() { writeInt(0); return buffer.position(); }

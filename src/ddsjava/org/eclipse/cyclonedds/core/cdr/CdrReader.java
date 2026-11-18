@@ -167,6 +167,14 @@ public final class CdrReader {
         buffer.get(bytes);
         return bytes;
     }
+    /** Copies retained byte elements and consumes the complete validated sequence. */
+    public void readByteBlock(org.eclipse.cyclonedds.type.seq.PackedByteSequence values, int count, int retained) {
+        if (retained < 0 || retained > count) throw new IllegalArgumentException("Invalid retained byte count");
+        require(count, 1);
+        int end = buffer.position() + count;
+        values.addFrom(buffer, retained);
+        buffer.position(end);
+    }
     public boolean isXcdr2() { return maxAlignment == 4; }
     public int beginType(boolean appendable) { return beginType(appendable ? 1 : 0); }
     public int beginType(int extensibility) {

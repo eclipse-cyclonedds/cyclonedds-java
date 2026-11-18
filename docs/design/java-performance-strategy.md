@@ -1,6 +1,6 @@
 # Strategie zur Verbesserung der Java-Wrapper-Performance
 
-Stand: 18. November 2026. Dies ist ein Umsetzungsvorschlag, keine bereits implementierte Optimierung.
+Stand: 18. November 2026. Dieses Dokument beschreibt die umgesetzten Schritte und die geplanten Folgearbeiten.
 
 ## Ziel und Ausgangspunkt
 
@@ -13,6 +13,8 @@ Die Ursachenanalyse ergab für 200,01 MB: 4,16 s und 2,84 GB Java-Allokationen a
 Schritt 1 ist im Arbeitsstand umgesetzt: Vorreservierung in `CdrCodecs.primitiveSequence`, ergänzt um Regressionstests. 20 ausgewählte Korrektheits-/Interoperabilitätstests einschließlich verschachtelter Struct-Arrays bestanden. Der frische Vergleich mit drei Prozessen je Variante ergab bei 200,01 MB 4,14 → 1,55 s reine Dekodierzeit und 2,84 → 0,80 GB Java-Allokationen. Ein separater 1-GB-DDS-Prozess mit einer Aufwärm- und drei Messnachrichten gelang mit 12 GiB Heap; durchschnittlich 12,29 s für Schreiben + Empfang. Das 8-GiB-Ziel und ähnliche Gesamtperformance wie C# sind damit noch nicht nachgewiesen.
 
 Ergebnisse und Messgrenzen: [Schritt-1-Bericht](sequence-preallocation-results.md).
+
+Schritt 2 ist im Arbeitsstand umgesetzt: kompakte ByteSeq und blockweise CDR-Verarbeitung, verbindlich als Generator-Standard ohne Legacy-Option. Die vollständige Suite bestand mit 108 Tests. Alle fünf 1-GB-Prozesse bestanden die Messung mit 8 GiB Heap. Der frische Vergleich liegt je nach Größe noch bei 1,82–4,81× der C#-Zeit; das Zeitziel ist deshalb noch nicht erreicht. [Schritt-2-Ergebnisse](packed-byte-sequence-results.md).
 
 ## Vorgeschlagene Abnahmekriterien
 
@@ -45,7 +47,7 @@ Diese Stufe adressiert den größten verbleibenden strukturellen Verlust.
 
 Eine zusätzliche, auf `byte[]` basierende Implementierung von `ByteSeq` einführen, beispielsweise `PackedByteSequence`. Die vorhandene öffentliche `ByteSequence extends ArrayList<Byte>` bleibt erhalten, einschließlich ihrer Konstruktoren und bisherigen Verwendungsmöglichkeiten. Ein Austausch ihrer Oberklasse würde Anwendungen betreffen, die sie als ArrayList verwenden, und wird deshalb vermieden.
 
-Der Generator verwendet die neue Implementierung für neue Standardinstanzen und Empfangsfabriken. Getter, Setter und Konstruktorparameter der generierten Nachrichtentypen bleiben bei `ByteSeq`. Bereits generierte Klassen mit `ByteSequence::new` laufen weiter; ihre Empfangsdarstellung wird ohne Neugenerierung nicht automatisch kompakt. Das muss in den Versionshinweisen stehen. Anwendungen, die den als ByteSeq deklarierten Getter auf ArrayList heruntercasten, benötigen für neu generierte Typen eine Anpassung oder zunächst den Legacy-Generatorpfad. Diese konkrete Implementierungsannahme vor Umstellung des Generator-Defaults im eigenen Code und in den Beispielen suchen; für eine Übergangsphase eine explizite Legacy-Auswahl vorsehen.
+Der Generator verwendet die neue Implementierung für neue Standardinstanzen und Empfangsfabriken. Getter, Setter und Konstruktorparameter der generierten Nachrichtentypen bleiben bei `ByteSeq`. Bereits generierte Klassen mit `ByteSequence::new` laufen weiter; ihre Empfangsdarstellung wird ohne Neugenerierung nicht automatisch kompakt. Das Binding ist noch nicht veröffentlicht: Der Generator verwendet für Byte-Sequenzen verbindlich die kompakte Implementierung. Es gibt keine Legacy-Generatoroption. Anwendungen und Beispiele verwenden die deklarierte ByteSeq-Schnittstelle statt eines Downcasts auf ArrayList.
 
 Die neue Implementierung benötigt vollständige List-/ByteSeq-Semantik: primitive und boxed Zugriffe, Einfügen/Löschen, Iteratoren und deren Änderungen, Sublisten, Gleichheit/Hashcode, Array- und Bereichsoperationen sowie Serialisierung. Das bisherige Verhalten bei null-Werten explizit erhalten oder über einen kompatiblen Ausweichpfad abbilden; ein nacktes byte[] kann null-Listenelemente nicht darstellen. Die DDS-Kodierung muss ungültige Elemente weiterhin zurückweisen.
 

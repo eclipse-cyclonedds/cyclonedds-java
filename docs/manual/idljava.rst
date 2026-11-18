@@ -86,3 +86,23 @@ package-info files) carries the Cyclone translator banner. It identifies the IDL
 input, the Java output path and the core IDL compiler version, using the same layout
 as the C++ wrapper and naming the translator ``IDL to Java``. No generation timestamp
 is added.
+
+Compact byte sequences
+----------------------
+
+Generated ``sequence<octet>`` and other byte-mapped sequence fields implement
+``org.omg.type.ByteSeq`` using ``PackedByteSequence``, backed by an owned
+``byte[]``. The CDR codec transfers these values in blocks. Use the ``ByteSeq``
+interface rather than casting the generated default value to ``ArrayList``.
+There is no generator switch for the former representation.
+
+``PackedByteSequence`` supports ordinary ``List<Byte>`` operations and the
+primitive range operations on ``ByteSeq``. Constructors copy input arrays;
+exported arrays and decoded samples have independent ownership. Inserting
+``null`` switches that instance to boxed storage to preserve list semantics;
+CDR encoding still rejects null elements. Java serialization stores logical
+contents rather than unused capacity.
+
+The existing ``ByteSequence`` class and user-provided ``ByteSeq`` implementations
+remain usable through the generic codec path. Regenerate existing IDL classes
+to select compact receive storage automatically.

@@ -197,6 +197,11 @@ static const char *sequence_name(const void *spec) {
   return strcmp(method, "Int") == 0 ? "Integer" : method;
 }
 
+static const char *sequence_implementation(const void *spec) {
+  const char *name = sequence_name(spec);
+  return strcmp(name, "Byte") == 0 ? "PackedByte" : name;
+}
+
 static bool basic_sequence(const void *spec) {
   const void *type = resolved(spec);
   if (!idl_is_sequence(type)) return false;
@@ -277,7 +282,7 @@ static void emit_codec(FILE *out, const void *spec) {
       if (strcmp(boxed, "Char") == 0) boxed = "Character";
       fprintf(out, "org.eclipse.cyclonedds.core.cdr.CdrCodecs.<java.lang.%s, org.omg.type.%sSeq>primitiveSequence(", boxed, sequence_name(seq->type_spec));
       emit_recover_codec(out, seq->type_spec, seq->elem_try_construct.value);
-      fprintf(out, ", %"PRId32", org.eclipse.cyclonedds.type.seq.%sSequence::new)", (int32_t) seq->maximum, sequence_name(seq->type_spec));
+      fprintf(out, ", %"PRId32", org.eclipse.cyclonedds.type.seq.%sSequence::new)", (int32_t) seq->maximum, sequence_implementation(seq->type_spec));
     } else {
       fputs("org.eclipse.cyclonedds.core.cdr.CdrCodecs.sequence(", out); emit_recover_codec(out, seq->type_spec, seq->elem_try_construct.value);
       fprintf(out, ", %"PRId32", %s)", (int32_t) seq->maximum, idl_is_base_type(resolved(seq->type_spec)) ? "false" : "true");
@@ -317,7 +322,7 @@ static void emit_default(FILE *out, const void *spec) {
     if (strcmp(string_type(), "java.lang.String") != 0) fprintf(out, "new %s()", string_type()); else fputs("\"\"", out);
   }
   else if (idl_is_sequence(type)) {
-    if (basic_sequence(type)) fprintf(out, "new org.eclipse.cyclonedds.type.seq.%sSequence()", sequence_name(((const idl_sequence_t *) type)->type_spec));
+    if (basic_sequence(type)) fprintf(out, "new org.eclipse.cyclonedds.type.seq.%sSequence()", sequence_implementation(((const idl_sequence_t *) type)->type_spec));
     else fputs("new java.util.ArrayList<>()", out);
   } else if (idl_is_struct(type) || idl_is_union(type)) { fputs("new ", out); emit_type(out, type); fputs("()", out); }
   else if (idl_is_bitmask(type)) { char *q = qualified(type, ".", true); fprintf(out, "new %s(0L)", q); free(q); }

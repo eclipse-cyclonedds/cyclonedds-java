@@ -24,6 +24,7 @@ import org.eclipse.cyclonedds.core.cdr.CdrWriter;
 import org.eclipse.cyclonedds.domain.DomainParticipant;
 import org.eclipse.cyclonedds.sub.Sample;
 import org.eclipse.cyclonedds.type.seq.ByteSequence;
+import org.eclipse.cyclonedds.type.seq.PackedByteSequence;
 
 /** Fixed struct arrays and bounded struct sequences containing large primitive sequences. */
 public final class ComplexCollectionsTest {
@@ -33,7 +34,7 @@ public final class ComplexCollectionsTest {
         byte[] payload = new byte[id % 2 == 0 ? 41984 : 167936];
         for (int i = 0; i < payload.length; i++) payload[i] = (byte) ((i + id) % 251);
         return new PayloadEntry(id, new Position(id + .25, -id - .5),
-            "entry " + id + " €", new ByteSequence(payload));
+            "entry " + id + " €", id % 2 == 0 ? new PackedByteSequence(payload) : new ByteSequence(payload));
     }
     private static PayloadGroup group(int id) {
         var value = new PayloadGroup();
@@ -81,6 +82,7 @@ public final class ComplexCollectionsTest {
         return received.get(0).data();
     }
     public static void main(String[] args) throws Exception {
+        assert new PayloadEntry().get_payload() instanceof PackedByteSequence;
         var expected = message();
         for (int version : new int[]{1, 2}) for (var order : new ByteOrder[]{ByteOrder.LITTLE_ENDIAN, ByteOrder.BIG_ENDIAN}) {
             byte[] wire;
@@ -89,6 +91,7 @@ public final class ComplexCollectionsTest {
                 wire = writer.toByteArray();
             }
             var first = ComplexCollections.codec().read(new CdrReader(wire));
+            assert first.get_groups()[0].get_entries()[0].get_payload() instanceof PackedByteSequence;
             var second = ComplexCollections.codec().read(new CdrReader(wire));
             same(first, expected);
             same(second, expected);
