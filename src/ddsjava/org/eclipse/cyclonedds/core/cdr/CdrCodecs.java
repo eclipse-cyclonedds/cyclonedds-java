@@ -130,6 +130,8 @@ public final class CdrCodecs {
                 int count = r.readSequenceLength(bound, width);
                 int limit = r.sequenceLimit(count, bound);
                 L values = factory.get();
+                // Reserve only retained elements, after validating the wire length and recovery limit.
+                if (values instanceof ArrayList<?> list) list.ensureCapacity(limit);
                 for (int i = 0; i < count; i++) { r.prepareElement(); T value = element.read(r); if (i < limit) values.add(value); }
                 return values;
             }

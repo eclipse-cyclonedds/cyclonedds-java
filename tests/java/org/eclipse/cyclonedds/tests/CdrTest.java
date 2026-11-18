@@ -14,13 +14,69 @@ package org.eclipse.cyclonedds.tests;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
+import org.eclipse.cyclonedds.core.cdr.CdrCodecs;
 import org.eclipse.cyclonedds.core.cdr.CdrReader;
 import org.eclipse.cyclonedds.core.cdr.CdrWriter;
 
 public final class CdrTest {
     private CdrTest() {}
+    private static void primitiveSequences() {
+        var unbounded = CdrCodecs.primitiveSequence(CdrCodecs.INT, 0, ArrayList<Integer>::new);
+        var bounded = CdrCodecs.primitiveSequence(CdrCodecs.INT, 2, ArrayList<Integer>::new);
+        for (int version : new int[]{1, 2}) for (var order : new ByteOrder[]{ByteOrder.LITTLE_ENDIAN, ByteOrder.BIG_ENDIAN}) {
+            var expected = new ArrayList<Integer>();
+            for (int i = 0; i < 10000; i++) expected.add(i);
+            var writer = new CdrWriter(version, order);
+            unbounded.write(writer, expected);
+            writer.writeInt(42);
+            var reader = new CdrReader(writer.toByteArray());
+            assert unbounded.read(reader).equals(expected);
+            assert reader.readInt() == 42;
+
+            writer = new CdrWriter(version, order);
+            unbounded.write(writer, new ArrayList<>(List.of(1, 2, 3, 4)));
+            writer.writeInt(42);
+            byte[] oversized = writer.toByteArray();
+            Checks.rejects(IllegalArgumentException.class, () -> bounded.read(new CdrReader(oversized)));
+            for (int mode : new int[]{1, 2}) {
+                var recovery = CdrCodecs.recover(bounded, mode, ArrayList<Integer>::new);
+                reader = new CdrReader(oversized);
+                assert recovery.read(reader).equals(mode == 1 ? List.of() : List.of(1, 2));
+                assert reader.readInt() == 42; // Discarded elements must still be consumed.
+            }
+
+            writer = new CdrWriter(version, order);
+            writer.writeSequenceLength(0, 0);
+            writer.writeInt(42);
+            reader = new CdrReader(writer.toByteArray());
+            assert bounded.read(reader).isEmpty();
+            assert reader.readInt() == 42;
+
+            // A custom non-ArrayList factory must retain its type and instance.
+            var linked = new LinkedList<Integer>();
+            var custom = CdrCodecs.primitiveSequence(CdrCodecs.INT, 0, () -> linked);
+            assert custom.read(new CdrReader(oversized)) == linked;
+            assert linked.equals(List.of(1, 2, 3, 4));
+
+            for (int length : new int[]{-1, Integer.MAX_VALUE, 2}) {
+                writer = new CdrWriter(version, order);
+                writer.writeInt(length);
+                writer.writeByte((byte) 1); // Insufficient input, even with TRIM recovery.
+                byte[] invalid = writer.toByteArray();
+                var checked = CdrCodecs.<Integer, ArrayList<Integer>>primitiveSequence(CdrCodecs.INT, 1, () -> {
+                    throw new AssertionError("Malformed length must fail before constructing a list");
+                });
+                var recovery = CdrCodecs.recover(checked, 2, ArrayList<Integer>::new);
+                Checks.rejects(IllegalArgumentException.class, () -> recovery.read(new CdrReader(invalid)));
+            }
+        }
+    }
     public static void main(String[] args) {
+        primitiveSequences();
         // Independent XCDR2 byte vector: octet, long long aligned to 4, short, string.
         var writer = new CdrWriter();
         writer.writeByte((byte) 0x42);

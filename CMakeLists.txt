@@ -328,6 +328,8 @@ if(BUILD_TESTING)
   set_tests_properties(async-listeners bitmask-interop lifecycle-stress PROPERTIES
     ENVIRONMENT "CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address=\"127.0.0.1\"/></Interfaces><AllowMulticast>false</AllowMulticast></General><Discovery><ParticipantIndex>auto</ParticipantIndex><Peers><Peer Address=\"127.0.0.1\"/></Peers></Discovery></Domain></CycloneDDS>")
   add_test(NAME generated-types COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>" -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.GeneratedTypesTest)
+  add_test(NAME complex-collections COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni
+    "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>" -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.ComplexCollectionsTest)
   add_test(NAME annotations COMMAND ${Java_JAVA_EXECUTABLE} -ea -Xcheck:jni
     "-Djava.library.path=$<TARGET_FILE_DIR:cycloneddsjava>" -cp "${TEST_CP}" org.eclipse.cyclonedds.tests.AnnotationTest)
   set_tests_properties(annotations PROPERTIES TIMEOUT 30)

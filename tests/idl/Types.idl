@@ -59,6 +59,21 @@ module BindingTest {
     sequence<Color, 4> palette;
     sequence<sequence<long, 4>, 4> nested;
   };
+  @final struct PayloadEntry {
+    long id;
+    Position position;
+    string label;
+    sequence<octet> payload;
+  };
+  @final struct PayloadGroup {
+    PayloadEntry entries[3];
+    sequence<PayloadEntry, 4> history;
+  };
+  @final struct ComplexCollections {
+    PayloadGroup groups[2];
+    sequence<PayloadGroup, 4> batches;
+    long after;
+  };
   @final union Choice switch (long) {
     case 1: long count;
     case 2:
