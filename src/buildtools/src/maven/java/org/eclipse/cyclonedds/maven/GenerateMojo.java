@@ -72,7 +72,7 @@ public final class GenerateMojo extends AbstractMojo {
     private Path resolveCompiler() throws ArtifactResolutionException, IOException {
         if (compilerVersion == null || compilerVersion.isBlank()) return Idlc.archive();
         String version = compilerVersion;
-        var artifact = new DefaultArtifact("org.eclipse.cyclonedds", "org.eclipse.cyclonedds.idlc", "", "jar", version);
+        var artifact = new DefaultArtifact("io.trittsv.cyclonedds", "org.eclipse.cyclonedds.idlc", "", "jar", version);
         List<RemoteRepository> repositories = new ArrayList<>(project.getRemotePluginRepositories());
         for (RemoteRepository repository : project.getRemoteProjectRepositories()) if (repositories.stream().noneMatch(r -> r.getUrl().equals(repository.getUrl()))) repositories.add(repository);
         var request = new ArtifactRequest(artifact, repositories, "plugin");

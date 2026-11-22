@@ -16,7 +16,7 @@ Use JDK 17+ and Maven 3.9+. Add this dependency to your project's `pom.xml`:
 
 ```xml
 <dependency>
-  <groupId>org.eclipse.cyclonedds</groupId>
+  <groupId>io.trittsv.cyclonedds</groupId>
   <artifactId>org.eclipse.cyclonedds</artifactId>
   <version>11.0.1</version>
 </dependency>
@@ -49,7 +49,7 @@ IDL generator to your Maven project's `pom.xml`:
 </properties>
 <dependencies>
   <dependency>
-    <groupId>org.eclipse.cyclonedds</groupId>
+    <groupId>io.trittsv.cyclonedds</groupId>
     <artifactId>org.eclipse.cyclonedds</artifactId>
     <version>${cyclonedds.version}</version>
   </dependency>
@@ -57,7 +57,7 @@ IDL generator to your Maven project's `pom.xml`:
 <build>
   <plugins>
     <plugin>
-      <groupId>org.eclipse.cyclonedds</groupId>
+      <groupId>io.trittsv.cyclonedds</groupId>
       <artifactId>org.eclipse.cyclonedds.idlc</artifactId>
       <version>${cyclonedds.version}</version>
       <executions>
@@ -184,7 +184,9 @@ cmake --build build --target package
 The build creates separate runtime and compiler JARs for the configured platforms,
 per-platform assembly inputs, thin development JARs, JNI runtime and IDL backend. CPack produces development `.tar.gz` / `.zip` archives and SHA-256
 checksums. Pushing a release tag publishes the verified Maven artifacts to Maven Central
-when publishing credentials are configured; branch builds create workflow artifacts.
+when publishing credentials are configured. Temporarily, pushes and manual runs on
+`feature/initial-commit` also publish to the test group `io.trittsv.cyclonedds`.
+Other branch builds create workflow artifacts.
 See [release setup](docs/manual/maven.rst#publishing-a-release). The tests cover wire formats,
 standard API behavior, three independent C interoperability paths, a Java-only
 installed consumer, and bundled-native loading with native search paths disabled.

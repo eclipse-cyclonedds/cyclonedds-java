@@ -17,7 +17,7 @@ permissions:
   contents: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != 'refs/heads/feature/initial-commit' }}
 env:
   ANDROID_NDK_VERSION: 27.2.12479018
   # Also inherited by Maven subprocesses in the isolated consumer tests.
@@ -265,7 +265,11 @@ jobs:
 
   publish:
     name: Publish release to Maven Central
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    # TEMPORARY: publish this branch to io.trittsv.cyclonedds while Eclipse access is pending.
+    if: >-
+      (github.event_name == 'push' && github.ref_type == 'tag') ||
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+       github.ref == 'refs/heads/feature/initial-commit')
     needs: [verify-universal, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -291,7 +295,7 @@ jobs:
           path: release
       - name: Sign and publish the verified universal artifacts
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
@@ -302,8 +306,18 @@ jobs:
           for KEY in MAVEN_CENTRAL_USERNAME MAVEN_CENTRAL_PASSWORD MAVEN_GPG_KEY MAVEN_GPG_PASSPHRASE; do
             if [ -z "${!KEY}" ]; then echo "::error::Missing GitHub Actions secret: $KEY"; exit 1; fi
           done
-          python3 scripts/check-release-tag.py "$RELEASE_TAG"
-          VERSION=$RELEASE_TAG
+          if [ -n "$RELEASE_TAG" ]; then
+            python3 scripts/check-release-tag.py "$RELEASE_TAG"
+          else
+            # Restoring the Eclipse group must not accidentally enable branch releases there.
+            python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          group = ET.parse("pom.xml").getroot().find("{http://maven.apache.org/POM/4.0.0}groupId").text
+          if group != "io.trittsv.cyclonedds":
+              raise SystemExit("Branch test publishing requires groupId io.trittsv.cyclonedds")
+          PY
+          fi
+          VERSION=$(python3 -c 'import xml.etree.ElementTree as E; print(E.parse("pom.xml").getroot().find("{http://maven.apache.org/POM/4.0.0}version").text)')
           mvn -B -ntp -f maven/pom.xml -Prelease-artifacts,central-release \
             "-Dcyclonedds.runtime.jar=$PWD/release/org.eclipse.cyclonedds-${VERSION}.jar" \
             "-Dcyclonedds.idlc.verifiedJar=$PWD/release/org.eclipse.cyclonedds.idlc-${VERSION}.jar" \

@@ -20,12 +20,12 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
     <cyclonedds.version>11.0.1</cyclonedds.version>
   </properties>
   <dependencies><dependency>
-    <groupId>org.eclipse.cyclonedds</groupId><artifactId>org.eclipse.cyclonedds</artifactId>
+    <groupId>io.trittsv.cyclonedds</groupId><artifactId>org.eclipse.cyclonedds</artifactId>
     <version>${cyclonedds.version}</version>
   </dependency></dependencies>
   <build><plugins>
     <plugin>
-      <groupId>org.eclipse.cyclonedds</groupId><artifactId>org.eclipse.cyclonedds.idlc</artifactId>
+      <groupId>io.trittsv.cyclonedds</groupId><artifactId>org.eclipse.cyclonedds.idlc</artifactId>
       <version>${cyclonedds.version}</version>
       <executions><execution><goals><goal>generate</goal></goals></execution></executions>
     </plugin>

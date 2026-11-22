@@ -46,12 +46,12 @@ with tempfile.TemporaryDirectory(prefix="cyclonedds maven consumer ") as tempora
     # Force an alternate compiler-only bundle to be fetched through Maven's repository
     # resolver, independently of the already-installed launcher/plugin.
     remote = Path(temporary) / "tool repository"
-    relative = Path("org/eclipse/cyclonedds/org.eclipse.cyclonedds.idlc") / compiler_version
+    relative = Path("io/trittsv/cyclonedds/org.eclipse.cyclonedds.idlc") / compiler_version
     remote_version = remote / relative
     remote_version.mkdir(parents=True)
     compiler_name = f"org.eclipse.cyclonedds.idlc-{compiler_version}.jar"
     cached_compiler = repository / relative / compiler_name
-    installed = repository / "org/eclipse/cyclonedds/org.eclipse.cyclonedds.idlc" / args.version
+    installed = repository / "io/trittsv/cyclonedds/org.eclipse.cyclonedds.idlc" / args.version
     compiler_data = (installed / f"org.eclipse.cyclonedds.idlc-{args.version}.jar").read_bytes()
     pom_data = (installed / f"org.eclipse.cyclonedds.idlc-{args.version}.pom").read_text().replace(
         "<artifactId>org.eclipse.cyclonedds.idlc</artifactId>",
@@ -74,7 +74,7 @@ with tempfile.TemporaryDirectory(prefix="cyclonedds maven consumer ") as tempora
     before = output.stat().st_mtime_ns
     unchanged = run(base + ["-o", "package"], project)
     assert "up to date" in unchanged and output.stat().st_mtime_ns == before, unchanged
-    runtime = repository / f"org/eclipse/cyclonedds/org.eclipse.cyclonedds/{args.version}/org.eclipse.cyclonedds-{args.version}.jar"
+    runtime = repository / f"io/trittsv/cyclonedds/org.eclipse.cyclonedds/{args.version}/org.eclipse.cyclonedds-{args.version}.jar"
     java = Path(os.environ.get("JAVA_HOME", "")) / "bin/java" if os.environ.get("JAVA_HOME") else shutil.which("java")
     with zipfile.ZipFile(runtime) as jar:
         assert not any(n.startswith(("META-INF/cyclonedds-idlc/", "org/eclipse/cyclonedds/idlc/", "org/eclipse/cyclonedds/maven/")) or n == "META-INF/maven/plugin.xml" for n in jar.namelist())
