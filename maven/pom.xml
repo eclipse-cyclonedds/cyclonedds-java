@@ -19,14 +19,18 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
   <packaging>pom</packaging>
   <name>Cyclone DDS Java build tools</name>
   <description>Parent and release build for the Eclipse Cyclone DDS Java binding and IDL compiler.</description>
-  <url>https://github.com/trittsv/cyclonedds-java</url>
+  <url>https://github.com/eclipse-cyclonedds/cyclonedds-java</url>
   <developers>
-    <developer><id>trittsv</id><name>Sven Trittler</name><url>https://github.com/trittsv</url></developer>
+    <developer>
+      <id>cyclonedds</id>
+      <name>Eclipse Cyclone DDS contributors</name>
+      <url>https://github.com/eclipse-cyclonedds/cyclonedds-java</url>
+    </developer>
   </developers>
   <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false" child.scm.url.inherit.append.path="false">
-    <connection>scm:git:https://github.com/trittsv/cyclonedds-java.git</connection>
-    <developerConnection>scm:git:ssh://git@github.com/trittsv/cyclonedds-java.git</developerConnection>
-    <url>https://github.com/trittsv/cyclonedds-java</url>
+    <connection>scm:git:https://github.com/eclipse-cyclonedds/cyclonedds-java.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/eclipse-cyclonedds/cyclonedds-java.git</developerConnection>
+    <url>https://github.com/eclipse-cyclonedds/cyclonedds-java</url>
   </scm>
   <licenses><license><name>EPL-2.0 OR BSD-3-Clause</name><url>https://www.eclipse.org/legal/epl-2.0/</url></license></licenses>
   <modules>
