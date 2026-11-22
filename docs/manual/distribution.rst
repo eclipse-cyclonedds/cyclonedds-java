@@ -112,6 +112,8 @@ Java wrapper is built from a tag, CI requires the exact same tag in the C core
 repository; a missing tag fails the workflow without falling back to master.
 The prepare job resolves the selected ref once, then all desktop and Android
 jobs build that same commit. No core commit is hard-coded in the workflow.
+The separate UBSan workflow follows the same master/tag policy and logs its
+resolved core commit.
 The resolved commit is recorded in the job log and Android build metadata. No binding-specific core patches are applied, installed or bundled.
 The standalone runtime JAR embeds the matching unmodified core and its original
 license notices. Runtime behavior is verified against independent C peers built

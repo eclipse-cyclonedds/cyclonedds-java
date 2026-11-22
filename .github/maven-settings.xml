@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright(c) 2026 Sven Trittler
+     SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause -->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+  <mirrors>
+    <!-- Avoid Maven Central's shared-runner IP rate limits in CI.
+         Mirror only Central so consumer-test file repositories still work. -->
+    <mirror>
+      <id>google-maven-central</id>
+      <name>Google Cloud Storage Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+  </mirrors>
+</settings>

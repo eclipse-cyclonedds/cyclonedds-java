@@ -20,12 +20,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Build the pinned core and binding with UBSan
+      - name: Build core master or matching release tag and binding with UBSan
+        env:
+          CYCLONEDDS_CORE_REF: ${{ github.ref_type == 'tag' && format('refs/tags/{0}', github.ref_name) || 'refs/heads/master' }}
         shell: bash
         run: |
           FLAGS='-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer'
-          git clone https://github.com/eclipse-cyclonedds/cyclonedds.git "$RUNNER_TEMP/core"
-          git -C "$RUNNER_TEMP/core" checkout 3a5526315e64ac1d2a52e6ac1ae7f3e861c593d3
+          git init "$RUNNER_TEMP/core"
+          git -C "$RUNNER_TEMP/core" remote add origin https://github.com/eclipse-cyclonedds/cyclonedds.git
+          git -C "$RUNNER_TEMP/core" fetch --depth 1 origin "$CYCLONEDDS_CORE_REF"
+          git -C "$RUNNER_TEMP/core" checkout --detach FETCH_HEAD
+          echo "Cyclone DDS core ref: $CYCLONEDDS_CORE_REF"
+          git -C "$RUNNER_TEMP/core" rev-parse HEAD
           cmake -S "$RUNNER_TEMP/core" -B "$RUNNER_TEMP/core-build" \
             -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/core-install" -DCMAKE_BUILD_TYPE=Debug \
             "-DCMAKE_C_FLAGS=$FLAGS" -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF \

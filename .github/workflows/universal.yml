@@ -20,6 +20,8 @@ concurrency:
   cancel-in-progress: true
 env:
   ANDROID_NDK_VERSION: 27.2.12479018
+  # Also inherited by Maven subprocesses in the isolated consumer tests.
+  MAVEN_ARGS: --settings "${{ github.workspace }}/.github/maven-settings.xml"
 jobs:
   prepare:
     name: Select Cyclone DDS core
@@ -172,6 +174,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: maven
+          cache-dependency-path: |
+            pom.xml
+            maven/pom.xml
+            src/buildtools/pom.xml
+            .github/maven-settings.xml
       - uses: actions/download-artifact@v8
         with:
           pattern: platform-*
