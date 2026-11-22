@@ -20,6 +20,7 @@ import BindingTest.KeyedChoice;
 import BindingTest.NestedKeys;
 import BindingTest.Position;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeoutException;
@@ -95,13 +96,18 @@ public final class OmgOperationsTest {
                 query.setQueryParameters(List.of("2")); // Re-evaluate cached data and wake an already blocked waiter.
                 waiting.join(2000); assert !waiting.isAlive() && waitFailure.get() == null : waitFailure.get();
                 // Attach/detach can race with replacement without losing the current native attachment.
+                var startAttaching = new CountDownLatch(1);
                 Thread attaching = new Thread(() -> {
-                    try { for (int i = 0; i < 100; i++) { ws.detachCondition(query); ws.attachCondition(query); } }
+                    try {
+                        startAttaching.await();
+                        for (int i = 0; i < 1000; i++) { ws.detachCondition(query); ws.attachCondition(query); }
+                    }
                     catch (Throwable e) { waitFailure.set(e); }
                 });
                 attaching.start();
-                for (int i = 0; i < 100; i++) query.setQueryParameters(List.of(i % 2 == 0 ? "99" : "2"));
-                attaching.join(2000); assert !attaching.isAlive() && waitFailure.get() == null : waitFailure.get();
+                startAttaching.countDown();
+                for (int i = 0; i < 1000; i++) query.setQueryParameters(List.of(i % 2 == 0 ? "99" : "2"));
+                attaching.join(5000); assert !attaching.isAlive() && waitFailure.get() == null : waitFailure.get();
                 assert query.getQueryExpression().equals("id = %0") && query.getQueryParameters().equals(List.of("2"));
                 rejects(UnsupportedOperationException.class, () -> query.getQueryParameters().add("3"));
                 ws.waitForConditions(5, TimeUnit.SECONDS);

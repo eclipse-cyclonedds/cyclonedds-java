@@ -44,15 +44,19 @@ final class BlockingWaitSet extends WaitSet implements AutoCloseable {
             throw new IllegalArgumentException("Foreign condition");
         if (conditions.containsKey(condition)) return;
         var resource = backed.resource();
+        // Register before reading the handle. A concurrent query replacement
+        // must then acquire this waitset's monitor before deleting that handle.
+        resource.watch(this);
         try {
             int nativeCondition = resource.handle();
             Native.attach(handle, nativeCondition, true);
-            conditions.put(condition, new Attachment(resource, nativeCondition)); resource.watch(this);
+            conditions.put(condition, new Attachment(resource, nativeCondition));
             if (resource.handle != 0 && resource.handle != nativeCondition) replaced(condition, nativeCondition, resource.handle);
-            // Close may race between native attachment and registration.
+            // Close may invalidate the resource while attachment is in progress.
             if (resource.handle == 0) { deleted(condition); throw new Errors.Closed(env); }
             Native.waitsetTrigger(handle, true);
         } catch (DdsException e) { throw Errors.unchecked(env, e); }
+        finally { if (!conditions.containsKey(condition)) resource.unwatch(this); }
     }
     public synchronized void detachCondition(Condition condition) {
         requireOpen();
