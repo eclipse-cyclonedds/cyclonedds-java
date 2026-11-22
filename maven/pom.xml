@@ -10,7 +10,7 @@ http://www.eclipse.org/org/documents/edl-v10.php.
 
 SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project child.project.url.inherit.append.path="false" xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.eclipse.cyclonedds</groupId>
@@ -18,6 +18,16 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
   <version>11.0.1</version>
   <packaging>pom</packaging>
   <name>Cyclone DDS Java build tools</name>
+  <description>Parent and release build for the Eclipse Cyclone DDS Java binding and IDL compiler.</description>
+  <url>https://github.com/trittsv/cyclonedds-java</url>
+  <developers>
+    <developer><id>trittsv</id><name>Sven Trittler</name><url>https://github.com/trittsv</url></developer>
+  </developers>
+  <scm child.scm.connection.inherit.append.path="false" child.scm.developerConnection.inherit.append.path="false" child.scm.url.inherit.append.path="false">
+    <connection>scm:git:https://github.com/trittsv/cyclonedds-java.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/trittsv/cyclonedds-java.git</developerConnection>
+    <url>https://github.com/trittsv/cyclonedds-java</url>
+  </scm>
   <licenses><license><name>EPL-2.0 OR BSD-3-Clause</name><url>https://www.eclipse.org/legal/epl-2.0/</url></license></licenses>
   <modules>
     <module>..</module>
@@ -33,4 +43,40 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
     <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version></plugin>
     <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.2</version></plugin>
   </plugins></pluginManagement></build>
+  <profiles>
+    <profile>
+      <id>release-artifacts</id>
+      <build><plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId><artifactId>maven-source-plugin</artifactId><version>3.3.1</version>
+          <executions><execution><id>sources</id><goals><goal>jar-no-fork</goal></goals></execution></executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId><artifactId>maven-javadoc-plugin</artifactId><version>3.11.2</version>
+          <configuration><doclint>none</doclint><quiet>true</quiet></configuration>
+          <executions><execution><id>javadoc</id><goals><goal>jar</goal></goals></execution></executions>
+        </plugin>
+      </plugins></build>
+    </profile>
+    <profile>
+      <id>central-release</id>
+      <build><plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId><artifactId>maven-gpg-plugin</artifactId><version>3.2.8</version>
+          <!-- The BC signer reads MAVEN_GPG_KEY and MAVEN_GPG_PASSPHRASE directly. -->
+          <configuration><signer>bc</signer><bestPractices>true</bestPractices></configuration>
+          <executions><execution><id>sign</id><phase>verify</phase><goals><goal>sign</goal></goals></execution></executions>
+        </plugin>
+        <plugin>
+          <groupId>org.sonatype.central</groupId><artifactId>central-publishing-maven-plugin</artifactId><version>0.12.0</version>
+          <extensions>true</extensions>
+          <configuration>
+            <publishingServerId>central</publishingServerId>
+            <autoPublish>true</autoPublish>
+            <waitUntil>published</waitUntil>
+          </configuration>
+        </plugin>
+      </plugins></build>
+    </profile>
+  </profiles>
 </project>

@@ -165,7 +165,9 @@ from the matching checkout supplied with
 ``LICENSE`` also covers the bundled core under the shared project license terms.
 
 Compiler sources and the compiler Maven module live in ``src/buildtools``. The
-repository root contains the runtime Maven module; ``maven/pom.xml`` builds both.
+repository root contains the runtime Maven module; ``maven/pom.xml`` builds both
+and is their shared parent POM (``org.eclipse.cyclonedds-build``). The parent is
+published as a POM, not as a third JAR.
 
 A CMake build creates two distribution JARs:
 
@@ -210,12 +212,96 @@ platform resources to the ``org.eclipse.cyclonedds.idlc`` JAR alongside its Mave
 goal/descriptor. This same final compiler JAR is usable through Maven or
 ``java -jar``. Without those properties the reactor builds Java-only development
 artifacts. ``mvn package`` at repository root builds only the Java runtime.
-No command publishes remotely.
+These local packaging/install commands do not publish remotely.
 
 ``.github/workflows/universal.yml`` builds five desktop native variants, assembles the two
 JARs, adds the compiler's Maven integration and tests the identical pair on every
-host. It prepares JARs and POMs as workflow artifacts; remote results must be
-checked separately before release.
+host. Branch builds use the current Cyclone DDS C ``master`` commit, resolved once
+for all platforms. Tag builds require the exact same tag in
+``eclipse-cyclonedds/cyclonedds``; a missing tag fails without falling back to master.
+Sources and Javadoc are built on branches too, so release packaging is exercised
+before tagging.
+
+Publishing a release
+--------------------
+
+Pushing a tag ``X.Y.Z`` (for example ``11.0.1``) runs the normal platform builds and tests,
+then automatically publishes to Maven Central after all five universal-JAR host
+checks and all four Android cross-builds pass. The tag version must match the
+root POM, parent POM, compiler parent version and CMake project version. The C
+repository must contain the **exact same tag**. Tags with a ``v`` prefix are rejected.
+Pull requests, branch pushes and manual workflow runs never publish.
+
+The publication contains the tested runtime and final compiler JARs, their
+sources/Javadoc JARs, all three POMs, PGP signatures and checksums. The release
+job copies the verified compiler JAR as its main Maven artifact instead of
+replacing it with a new build. Maven Central's publishing plugin uploads one
+reactor bundle, automatically publishes it and waits until its state is
+``PUBLISHED``. Central releases cannot be overwritten; use a new version for
+subsequent changes.
+
+One-time account and signing setup:
+
+#. Create/sign in to an account at https://central.sonatype.com/ and ensure it
+   has publishing permission for the ``org.eclipse.cyclonedds`` namespace.
+   This requires authorization from the namespace owner; a GitHub repository
+   alone does not grant permission to publish Eclipse coordinates.
+#. Generate a Central Portal user token under the account settings. Use its
+   generated username and password, not your interactive login credentials.
+   See https://central.sonatype.org/publish/generate-portal-token/.
+#. Create or choose a passphrase-protected OpenPGP signing key. Publish its
+   public key to a Central-supported keyserver, for example:
+
+   .. code-block:: sh
+
+      gpg --full-generate-key
+      gpg --list-secret-keys --keyid-format LONG
+      gpg --keyserver keyserver.ubuntu.com --send-keys YOUR_FINGERPRINT
+      gpg --armor --export-secret-keys YOUR_FINGERPRINT > /safe/path/maven-signing-key.asc
+
+   Keep the exported private key outside the checkout. Central needs the public
+   key to verify signatures; see https://central.sonatype.org/publish/requirements/gpg/.
+#. In GitHub, open **Settings > Secrets and variables > Actions > New repository
+   secret** and add:
+
+   =============================  ================================================
+   Secret                         Value
+   =============================  ================================================
+   ``MAVEN_CENTRAL_USERNAME``     Generated Central Portal token username
+   ``MAVEN_CENTRAL_PASSWORD``     Generated Central Portal token password
+   ``MAVEN_GPG_KEY``              Entire ASCII-armored exported private key
+   ``MAVEN_GPG_PASSPHRASE``       Signing key passphrase
+   ``MAVEN_GPG_KEY_FINGERPRINT``  Optional: fingerprint if exporting multiple keys
+   =============================  ================================================
+
+The signing plugin reads these environment variables directly using its Java
+BC signer; no GPG executable or key import is required on the runner. Secrets
+are supplied only to the tag publication step. No extra GitHub token permission
+is required beyond the workflow's existing ``contents: read``.
+
+For example, after all versions are updated to ``11.0.1`` and the C repository
+has ``11.0.1``, push the Java release tag:
+
+.. code-block:: sh
+
+   git tag -a 11.0.1 -m "Cyclone DDS Java 11.0.1"
+   git push origin 11.0.1
+
+Local deployment dry run (requires a signing key in the environment, but no
+Central credentials and **does not upload**):
+
+.. code-block:: sh
+
+   mvn --settings .github/maven-settings.xml -f maven/pom.xml \
+     -Prelease-artifacts,central-release -DskipUpload=true \
+     -Dcyclonedds.runtime.jar=/absolute/path/to/verified-runtime.jar \
+     -Dcyclonedds.idlc.verifiedJar=/absolute/path/to/verified-compiler.jar deploy
+
+The bundle is written to ``maven/target/central-publishing/central-bundle.zip``.
+Use Maven 3.9.9 and JDK 17, matching the release job. The CI retains the signed
+bundle as the ``maven-central-deployment`` workflow artifact for diagnostics.
+The publishing extension is configured according to
+https://central.sonatype.org/publish/publish-portal-maven/.
 
 Validation
 ----------

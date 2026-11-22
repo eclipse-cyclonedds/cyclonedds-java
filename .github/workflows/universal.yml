@@ -17,7 +17,7 @@ permissions:
   contents: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 env:
   ANDROID_NDK_VERSION: 27.2.12479018
   # Also inherited by Maven subprocesses in the isolated consumer tests.
@@ -29,16 +29,23 @@ jobs:
     outputs:
       core-commit: ${{ steps.core.outputs.commit }}
     steps:
+      - uses: actions/checkout@v7
+      - name: Validate release version
+        if: github.ref_type == 'tag'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/check-release-tag.py "$RELEASE_TAG"
       - name: Check out latest master or matching release tag
         uses: actions/checkout@v7
         with:
           repository: eclipse-cyclonedds/cyclonedds
+          path: core
           ref: ${{ github.ref_type == 'tag' && format('refs/tags/{0}', github.ref_name) || 'refs/heads/master' }}
       - name: Record core commit for all platform builds
         id: core
         shell: bash
         run: |
-          COMMIT=$(git rev-parse HEAD)
+          COMMIT=$(git -C core rev-parse HEAD)
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
           echo "Cyclone DDS core: $COMMIT"
   platform:
@@ -197,10 +204,12 @@ jobs:
               --output "dist/${ARTIFACT}-${VERSION}.jar" --version "$VERSION" \
               --platforms linux-x86_64,linux-aarch64,macos-aarch64,windows-x86_64,windows-aarch64 --input-dir platform-inputs
           done
-          mvn -B -ntp -f maven/pom.xml \
+          mvn -B -ntp -f maven/pom.xml -Prelease-artifacts \
             "-Dcyclonedds.runtime.jar=$PWD/dist/org.eclipse.cyclonedds-${VERSION}.jar" \
             "-Dcyclonedds.idlc.jar=$PWD/dist/org.eclipse.cyclonedds.idlc-${VERSION}.jar" package
           cp "src/buildtools/target/org.eclipse.cyclonedds.idlc-${VERSION}.jar" dist/
+          cp target/*-sources.jar target/*-javadoc.jar dist/
+          cp src/buildtools/target/*-sources.jar src/buildtools/target/*-javadoc.jar dist/
           cp pom.xml "dist/org.eclipse.cyclonedds-${VERSION}.pom"
           cp maven/pom.xml "dist/org.eclipse.cyclonedds-build-${VERSION}.pom"
           cp src/buildtools/pom.xml "dist/org.eclipse.cyclonedds.idlc-${VERSION}.pom"
@@ -253,6 +262,59 @@ jobs:
           subprocess.run([sys.executable, "tests/idlc_bundle.py", str(java / "java"), str(java / "javac"),
                           str(root / "release" / f"org.eclipse.cyclonedds.idlc-{version}.jar"),
                           str(root / "release" / f"org.eclipse.cyclonedds-{version}.jar"), str(root)], check=True)
+
+  publish:
+    name: Publish release to Maven Central
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [verify-universal, android]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: |
+            pom.xml
+            maven/pom.xml
+            src/buildtools/pom.xml
+            .github/maven-settings.xml
+      # The Central publishing extension requires Maven 3.
+      - uses: stCarolas/setup-maven@d6af6abeda15e98926a57b5aa970a96bb37f97d1 # v5
+        with:
+          maven-version: '3.9.9'
+      - uses: actions/download-artifact@v8
+        with:
+          name: universal-java
+          path: release
+      - name: Sign and publish the verified universal artifacts
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          MAVEN_GPG_KEY_FINGERPRINT: ${{ secrets.MAVEN_GPG_KEY_FINGERPRINT }}
+        shell: bash
+        run: |
+          for KEY in MAVEN_CENTRAL_USERNAME MAVEN_CENTRAL_PASSWORD MAVEN_GPG_KEY MAVEN_GPG_PASSPHRASE; do
+            if [ -z "${!KEY}" ]; then echo "::error::Missing GitHub Actions secret: $KEY"; exit 1; fi
+          done
+          python3 scripts/check-release-tag.py "$RELEASE_TAG"
+          VERSION=$RELEASE_TAG
+          mvn -B -ntp -f maven/pom.xml -Prelease-artifacts,central-release \
+            "-Dcyclonedds.runtime.jar=$PWD/release/org.eclipse.cyclonedds-${VERSION}.jar" \
+            "-Dcyclonedds.idlc.verifiedJar=$PWD/release/org.eclipse.cyclonedds.idlc-${VERSION}.jar" \
+            deploy
+      - name: Save signed deployment bundle
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maven-central-deployment
+          path: '**/target/central-publishing/*.zip'
+          if-no-files-found: ignore
 
   android:
     needs: prepare

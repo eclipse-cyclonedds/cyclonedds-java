@@ -183,7 +183,9 @@ cmake --build build --target package
 
 The build creates separate runtime and compiler JARs for the configured platforms,
 per-platform assembly inputs, thin development JARs, JNI runtime and IDL backend. CPack produces development `.tar.gz` / `.zip` archives and SHA-256
-checksums. Nothing is published automatically. The tests cover wire formats,
+checksums. Pushing a release tag publishes the verified Maven artifacts to Maven Central
+when publishing credentials are configured; branch builds create workflow artifacts.
+See [release setup](docs/manual/maven.rst#publishing-a-release). The tests cover wire formats,
 standard API behavior, three independent C interoperability paths, a Java-only
 installed consumer, and bundled-native loading with native search paths disabled.
 Local validation is macOS ARM64; Linux x86-64/ARM64, macOS ARM64 and Windows x86-64/ARM64 CI is configured.

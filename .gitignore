@@ -10,6 +10,7 @@
 
 /build/
 /target/
+/maven/target/
 /src/*/target/
 *.class
 .DS_Store
