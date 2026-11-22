@@ -116,11 +116,12 @@ No separate source-tree directory of copied dependency licenses is needed.
 Branch and pull-request builds use the latest Cyclone DDS ``master``. When the
 Java wrapper is built from a tag, CI requires the exact same tag in the C core
 repository; a missing tag fails the workflow without falling back to master.
-The prepare job resolves the selected ref once, then all desktop and Android
-jobs build that same commit. No core commit is hard-coded in the workflow.
+The prepare job resolves the selected ref once, then all desktop jobs
+build that same commit. No core commit is hard-coded in the workflow.
 The separate UBSan workflow follows the same master/tag policy and logs its
 resolved core commit.
-The resolved commit is recorded in the job log and Android build metadata. No binding-specific core patches are applied, installed or bundled.
+The resolved commit is recorded in the job log. No binding-specific core patches
+are applied, installed or bundled.
 The standalone runtime JAR embeds the matching unmodified core and its original
 license notices. Runtime behavior is verified against independent C peers built
 with the same unmodified installation.
@@ -130,40 +131,37 @@ updates are rejected, wchar/negative signed 64-bit union labels are diagnosed,
 and generated representation restrictions keep unsupported schemas off XCDR1
 endpoints. Java codec-only vectors do not establish native DDS interoperability.
 
-Mobile cross-builds
--------------------
+Local Android cross-builds
+--------------------------
 
-The Android CI job builds JNI for ``arm64-v8a``, ``x86_64``, ``armeabi-v7a`` and
-``x86`` using NDK ``27.2.12479018`` and Android API 28, with 16 KB page support.
-The NDK version, desktop runner labels and action versions follow the
-`C# binding CI <https://github.com/eclipse-cyclonedds/cyclonedds-csharp/blob/master/.github/workflows/build.yml>`_.
-Java artifact versions are maintained in the project files; core selection follows
-the branch/tag policy above. Desktop builds use JDK 17 (Microsoft OpenJDK on Windows ARM64,
-Temurin elsewhere); Android SDK tooling uses Temurin JDK 21.
+Android JNI can be built manually for ``arm64-v8a``, ``x86_64``, ``armeabi-v7a``
+and ``x86``. There are no Android CI jobs, published Android binaries or Android
+payloads in the universal Maven JARs.
 
-Each ``android-jni-<abi>`` workflow artifact contains
-``jniLibs/<abi>/libcycloneddsjava.so``, license notices, an ELF report and build
-metadata with a SHA-256 digest. The matching DDS core is statically linked into
-JNI. No Android compiler executable is built. CI verifies architecture, SONAME
-and LOAD segment alignment. It does not run an emulator or establish Android
-Java runtime compatibility. These payloads are separate from the universal
-JARs; they are experimental native build artifacts, not a ready-to-use AAR.
-
-To repeat the native build locally (CMake 3.21+, Python 3 and the pinned NDK):
+With CMake 3.21+, Python 3 and Android NDK ``27.2.12479018`` installed:
 
 .. code-block:: sh
 
    python3 scripts/build-android.py --ndk /path/to/android/ndk/27.2.12479018 --abi arm64-v8a
 
-Use ``--ref <tag>`` to select a release core locally. An existing core checkout
-can be supplied with ``--source`` for an offline build; it is used unchanged. ``BUILD_NATIVE_ONLY=ON`` configures only the JNI target, without
-requiring a host JDK, IDL compiler, examples or JVM tests.
+The script targets Android API 28 with 16 KB page support. It builds the C core
+and statically links it into JNI. By default it uses core ``master``; supply
+``--ref 11.0.1`` for that release, or ``--source /path/to/cyclonedds`` to use an
+existing core checkout without fetching it. ``BUILD_NATIVE_ONLY=ON`` configures
+only JNI, without requiring a host JDK, IDL compiler, examples or JVM tests.
 
-An Android application still needs Java 17 API/desugaring compatibility checks,
-Android-specific library loading/packaging and device or emulator tests. The
-current desktop loader extracts bundled libraries into a temporary directory;
-it is not an Android integration. Load the packaged JNI library through the
-Android application's native-library mechanism when developing that integration.
+Output is written to ``build/android/<abi>/package/``, containing
+``jniLibs/<abi>/libcycloneddsjava.so``, license notices, an ELF report and build
+metadata with a SHA-256 digest. The script checks architecture, SONAME and LOAD
+segment alignment. It does not run an Android emulator or test Java runtime
+compatibility. The output is a native payload, not an AAR.
+
+Applications must provide Java 17 API/desugaring compatibility, Android-specific
+native-library loading and packaging, and device or emulator testing. The
+desktop runtime loader is not an Android integration.
+
+iOS
+---
 
 iOS ARM64 (including the simulator) is not configured: the current binding
 requires a JVM with JNI and has no iOS Java/AOT toolchain or static native

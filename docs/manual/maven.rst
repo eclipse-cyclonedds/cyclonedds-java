@@ -227,7 +227,7 @@ Publishing a release
 
 Pushing a tag ``X.Y.Z`` (for example ``11.0.1``) runs the normal platform builds and tests,
 then automatically publishes to Maven Central after all five universal-JAR host
-checks and all four Android cross-builds pass. The tag version must match the
+checks pass. The tag version must match the
 root POM, parent POM, compiler parent version and CMake project version. The C
 repository must contain the **exact same tag**. Tags with a ``v`` prefix are rejected.
 Pull requests, branch pushes and manual workflow runs never publish.
