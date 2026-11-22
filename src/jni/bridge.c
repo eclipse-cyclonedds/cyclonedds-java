@@ -485,8 +485,23 @@ JNIEXPORT jlong JNICALL JNI_METHOD(instanceOperation)(JNIEnv *env, jclass cls, j
 JNIEXPORT void JNICALL JNI_METHOD(dispose)(JNIEnv *env, jclass cls, jint writer, jlong instance, jboolean unregister, jlong timestamp) {
   UNUSED_CLASS;
   dds_time_t time = timestamp < 0 ? dds_time() : timestamp;
-  dds_return_t rc = unregister ? dds_unregister_instance_ih_ts(writer, (dds_instance_handle_t) instance, time)
-                               : dds_dispose_ih_ts(writer, (dds_instance_handle_t) instance, time);
+  const struct ddsi_sertype *type;
+  struct java_sample key = {0};
+  dds_qos_t *qos = dds_create_qos();
+  uint32_t count = 0;
+  dds_data_representation_id_t *representations = NULL;
+  dds_return_t rc = dds_get_entity_sertype(writer, &type);
+  if (rc >= 0) rc = dds_instance_get_key(writer, (dds_instance_handle_t) instance, &key);
+  if (rc >= 0) rc = dds_get_qos(writer, qos);
+  if (rc >= 0 && (!dds_qget_data_representation(qos, &count, &representations) || !count))
+    rc = DDS_RETCODE_BAD_PARAMETER;
+  if (rc >= 0 && !java_reencode_key(type, &key, representations[0] == DDS_DATA_REPRESENTATION_XCDR1))
+    rc = DDS_RETCODE_BAD_PARAMETER;
+  if (rc >= 0) rc = unregister ? dds_unregister_instance_ts(writer, &key, time)
+                               : dds_dispose_ts(writer, &key, time);
+  dds_free(representations);
+  dds_delete_qos(qos);
+  ddsrt_free(key.bytes);
   if (rc < 0) fail(env, "Dispose/unregister instance", rc);
 }
 JNIEXPORT jlongArray JNICALL JNI_METHOD(matchedHandles)(JNIEnv *env, jclass cls, jint endpoint, jboolean writer) {

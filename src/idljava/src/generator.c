@@ -376,13 +376,6 @@ static void emit_key_copies(FILE *out, const idl_pstate_t *pstate, const idl_str
     }
 }
 
-static bool used_as_base(const idl_node_t *nodes, const idl_struct_t *type) {
-  for (const idl_node_t *n = nodes; n; n = n->next) {
-    if (idl_is_module(n) && used_as_base(((const idl_module_t *) n)->definitions, type)) return true;
-    if (idl_is_struct(n) && ((const idl_struct_t *) n)->inherit_spec && ((const idl_struct_t *) n)->inherit_spec->base == type) return true;
-  }
-  return false;
-}
 struct java_field { const idl_member_t *member; const idl_declarator_t *decl; };
 static size_t fields_of(const idl_struct_t *node, struct java_field *fields, size_t count) {
   if (node->inherit_spec) count = fields_of(node->inherit_spec->base, fields, count);
@@ -731,7 +724,10 @@ static idl_retcode_t emit_struct(FILE *out, const idl_pstate_t *pstate, const id
   char *dds_name = qualified(&node->node, "::", false);
   fprintf(out, "    private static final org.eclipse.cyclonedds.topic.TypeSupport<%s> $TYPE = new org.eclipse.cyclonedds.topic.TypeSupport<>(\"%s\", %s,\n        ", name, dds_name, idl_is_keyless(node, pstate->keylists) ? "false" : "true");
   emit_hex(out, blobs.typeinfo, blobs.typeinfo_size); fputs(",\n        ", out); emit_hex(out, blobs.typemap, blobs.typemap_size); fprintf(out, ", $CODEC, %"PRIu32");\n", representations(node));
-  if (!used_as_base(pstate->root, node)) fprintf(out, "    public static org.eclipse.cyclonedds.topic.TypeSupport.Codec<%s> codec() { return $CODEC; }\n    public static org.eclipse.cyclonedds.topic.TypeSupport<%s> typeSupport() { return $TYPE; }\n", name, name);
+  /* A base can be extended in a separately compiled IDL file. Type-specific
+     varargs keep zero-argument calls typed without incompatible static method
+     hiding, and overload resolution selects the most-derived class. */
+  fprintf(out, "    public static org.eclipse.cyclonedds.topic.TypeSupport.Codec<%s> codec(%s... unused) { return $CODEC; }\n    public static org.eclipse.cyclonedds.topic.TypeSupport<%s> typeSupport(%s... unused) { return $TYPE; }\n", name, name, name, name);
   fprintf(out, "    public static org.eclipse.cyclonedds.topic.TypeSupport.Codec<%s> $codec$%s() { return $CODEC; }\n    public static org.eclipse.cyclonedds.topic.TypeSupport<%s> $typeSupport$%s() { return $TYPE; }\n", name, name, name, name);
   emit_verbatim(out, &node->node, "END_DECLARATION");
   fputs("}\n", out);

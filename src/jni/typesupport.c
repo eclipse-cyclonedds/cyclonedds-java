@@ -175,13 +175,37 @@ static struct ddsi_serdata *from_fragments(const struct ddsi_sertype *type, enum
   return finish_data(d);
 }
 
+/* Unlike the internal instance-map key, an on-wire key sample must retain the
+   writer's representation and the type's encapsulation format. */
+static struct ddsi_serdata *key_from_data(const struct ddsi_serdata *data, enum dds_cdr_enc_version version) {
+  const struct java_data *source = as_data(data);
+  const struct java_type *type = as_type(data->type);
+  dds_istream_t is;
+  dds_istream_init_well_formed(&is, source->key_size, source->key, DDSI_RTPS_CDR_ENC_VERSION_2);
+  dds_ostream_t os;
+  dds_ostream_init(&os, CDR_ALLOCATOR, 0, version);
+  dds_stream_extract_key_from_key(&is, &os, DDS_CDR_KEY_SERIALIZATION_SAMPLE, CDR_ALLOCATOR, &type->desc);
+  struct java_data *key = new_data(data->type, SDK_KEY, (size_t) os.m_index + 4);
+  if (key) {
+    key->bytes[1] = version == DDSI_RTPS_CDR_ENC_VERSION_1
+        ? (type->extensibility == 2 ? 2 : 0) : 6 + 2 * type->extensibility;
+#if DDSRT_ENDIAN == DDSRT_LITTLE_ENDIAN
+    key->bytes[1]++;
+#endif
+    if (os.m_index) memcpy(key->bytes + 4, os.m_buffer, os.m_index);
+  }
+  dds_ostream_fini(&os, CDR_ALLOCATOR);
+  return key ? finish_data(key) : NULL;
+}
+
 static struct ddsi_serdata *from_sample(const struct ddsi_sertype *type, enum ddsi_serdata_kind kind, const void *sample) {
   const struct java_sample *s = sample;
   ddsrt_iovec_t iov = {.iov_base = s->bytes, .iov_len = s->size};
   enum ddsi_serdata_kind input_kind = s->kind == SDK_EMPTY ? kind : s->kind;
   struct ddsi_serdata *data = from_iov(type, input_kind, 1, &iov, s->size);
   if (data && kind == SDK_KEY && input_kind == SDK_DATA) {
-    struct ddsi_serdata *key = data->ops->to_untyped(data);
+    struct ddsi_serdata *key = key_from_data(data, s->bytes[1] < 4
+        ? DDSI_RTPS_CDR_ENC_VERSION_1 : DDSI_RTPS_CDR_ENC_VERSION_2);
     ddsi_serdata_unref(data);
     return key;
   }
@@ -230,9 +254,9 @@ static struct ddsi_serdata *to_untyped(const struct ddsi_serdata *base) {
   struct java_data *key = new_data(base->type, SDK_KEY, 4 + d->key_size);
   if (!key) return NULL;
 #if DDSRT_ENDIAN == DDSRT_LITTLE_ENDIAN
-  key->bytes[1] = 7;
+  key->bytes[1] = 7 + 2 * as_type(base->type)->extensibility;
 #else
-  key->bytes[1] = 6;
+  key->bytes[1] = 6 + 2 * as_type(base->type)->extensibility;
 #endif
   if (d->key_size) memcpy(key->bytes + 4, d->key, d->key_size);
   key->key = ddsrt_malloc(d->key_size ? d->key_size : 1);
@@ -248,6 +272,19 @@ static bool untyped_to_sample(const struct ddsi_sertype *type, const struct ddsi
   return to_sample(data, sample, buffer, limit);
 }
 
+bool java_reencode_key(const struct ddsi_sertype *type, struct java_sample *sample, bool xcdr1) {
+  ddsrt_iovec_t iov = {.iov_base = sample->bytes, .iov_len = sample->size};
+  struct ddsi_serdata *source = from_iov(type, SDK_KEY, 1, &iov, sample->size);
+  if (!source) return false;
+  struct ddsi_serdata *key = key_from_data(source,
+      xcdr1 ? DDSI_RTPS_CDR_ENC_VERSION_1 : DDSI_RTPS_CDR_ENC_VERSION_2);
+  ddsi_serdata_unref(source);
+  if (!key) return false;
+  bool ok = to_sample(key, sample, NULL, NULL);
+  ddsi_serdata_unref(key);
+  return ok;
+}
+
 static size_t print_data(const struct ddsi_sertype *type, const struct ddsi_serdata *data, char *out, size_t size) {
   return (size_t) snprintf(out, size, "%s: %u CDR bytes", type->type_name, as_data(data)->size);
 }
@@ -258,10 +295,16 @@ static void keyhash(const struct ddsi_serdata *base, struct ddsi_keyhash *out, b
   if (!base->type->has_key) return;
   dds_istream_t is;
   dds_istream_init_well_formed(&is, d->key_size, d->key, DDSI_RTPS_CDR_ENC_VERSION_2);
+  const enum dds_cdr_enc_version version = d->bytes[1] < 4
+      ? DDSI_RTPS_CDR_ENC_VERSION_1 : DDSI_RTPS_CDR_ENC_VERSION_2;
   dds_ostreamBE_t os;
-  dds_ostreamBE_init(&os, CDR_ALLOCATOR, 16, DDSI_RTPS_CDR_ENC_VERSION_2);
+  dds_ostreamBE_init(&os, CDR_ALLOCATOR, 16, version);
   dds_stream_extract_keyBE_from_key(&is, &os, DDS_CDR_KEY_SERIALIZATION_KEYHASH, CDR_ALLOCATOR, &t->desc);
-  if (force_md5 || !(t->desc.flagset & DDS_TOPIC_FIXED_KEY_XCDR2)) digest(os.x.m_buffer, os.x.m_index, out->value);
+  /* Mutable XCDR2 key samples contain member headers, but their canonical
+     key-hash form does not. Match the core's maximum-size flag for that form. */
+  const uint32_t fixed_key = version == DDSI_RTPS_CDR_ENC_VERSION_1
+      ? DDS_TOPIC_FIXED_KEY : DDS_TOPIC_FIXED_KEY_XCDR2_KEYHASH;
+  if (force_md5 || !(t->desc.flagset & fixed_key)) digest(os.x.m_buffer, os.x.m_index, out->value);
   else if (os.x.m_index <= 16) memcpy(out->value, os.x.m_buffer, os.x.m_index);
   dds_ostreamBE_fini(&os, CDR_ALLOCATOR);
 }
