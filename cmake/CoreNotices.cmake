@@ -13,7 +13,9 @@ file(MAKE_DIRECTORY "${CORE_NOTICES_DIR}")
 # Normalize upstream checkout line endings so all platform inputs share notices.
 file(READ "${_core_notice}" _notice)
 string(REPLACE "\r\n" "\n" _notice "${_notice}")
-file(WRITE "${CORE_NOTICES_DIR}/NOTICE.md" "${_notice}")
+# file(WRITE) uses native text-mode line endings on Windows. These resources
+# must have identical bytes in every platform JAR before universal assembly.
+file(CONFIGURE OUTPUT "${CORE_NOTICES_DIR}/NOTICE.md" CONTENT "${_notice}" @ONLY NEWLINE_STYLE LF)
 file(READ "${_mcpp_source}" _mcpp)
 string(REPLACE "\r\n" "\n" _mcpp "${_mcpp}")
 string(FIND "${_mcpp}" "*/" _license_end)
@@ -27,4 +29,4 @@ string(STRIP "${_mcpp}" _mcpp)
 if(NOT _mcpp MATCHES "Kiyoshi Matsui" OR NOT _mcpp MATCHES "SUCH DAMAGE\\.")
   message(FATAL_ERROR "Incomplete MCPP license header in ${_mcpp_source}")
 endif()
-file(WRITE "${CORE_NOTICES_DIR}/LICENSE-mcpp" "${_mcpp}\n")
+file(CONFIGURE OUTPUT "${CORE_NOTICES_DIR}/LICENSE-mcpp" CONTENT "${_mcpp}\n" @ONLY NEWLINE_STYLE LF)

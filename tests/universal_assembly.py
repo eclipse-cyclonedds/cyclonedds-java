@@ -19,6 +19,13 @@ metadata = "META-INF/cyclonedds/bundle.properties"
 with zipfile.ZipFile(runtime) as jar:
     host = next(line.split("=", 1)[1] for line in jar.read(metadata).decode().splitlines() if line.startswith("platform="))
 foreign = "linux-x86_64" if host != "linux-x86_64" else "macos-aarch64"
+for artifact in (runtime, compiler):
+    with zipfile.ZipFile(artifact) as jar:
+        notice = jar.read("META-INF/cyclonedds/NOTICE.md")
+        assert notice and b"\r" not in notice, "Core notice must use LF on every platform"
+with zipfile.ZipFile(compiler) as jar:
+    notice = jar.read("META-INF/cyclonedds/LICENSE-mcpp")
+    assert notice and b"\r" not in notice, "MCPP license must use LF on every platform"
 with tempfile.TemporaryDirectory(prefix="cyclonedds universal test ") as temporary:
     root = Path(temporary)
     def run(*command, succeeds=True):
