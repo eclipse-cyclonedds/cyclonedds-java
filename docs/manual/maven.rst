@@ -13,7 +13,7 @@ Maven: runtime and IDL compiler
 ===============================
 
 The distribution has two JAR artifacts, both version ``11.0.1`` in Maven group
-``io.trittsv.cyclonedds``:
+``org.eclipse.cyclonedds``:
 
 * ``org.eclipse.cyclonedds``: Java API, provider, DDS core and JNI runtime libraries.
 * ``org.eclipse.cyclonedds.idlc``: IDL compiler, Java backend, compiler platform
@@ -51,7 +51,7 @@ Declare the runtime as a dependency and the compiler as a build tool:
    </properties>
    <dependencies>
      <dependency>
-       <groupId>io.trittsv.cyclonedds</groupId>
+       <groupId>org.eclipse.cyclonedds</groupId>
        <artifactId>org.eclipse.cyclonedds</artifactId>
        <version>${cyclonedds.version}</version>
      </dependency>
@@ -59,7 +59,7 @@ Declare the runtime as a dependency and the compiler as a build tool:
    <build>
      <plugins>
        <plugin>
-         <groupId>io.trittsv.cyclonedds</groupId>
+         <groupId>org.eclipse.cyclonedds</groupId>
          <artifactId>org.eclipse.cyclonedds.idlc</artifactId>
          <version>${cyclonedds.version}</version>
          <executions>
@@ -230,15 +230,7 @@ then automatically publishes to Maven Central after all five universal-JAR host
 checks and all four Android cross-builds pass. The tag version must match the
 root POM, parent POM, compiler parent version and CMake project version. The C
 repository must contain the **exact same tag**. Tags with a ``v`` prefix are rejected.
-Temporarily, pushes and manual workflow runs on ``feature/initial-commit`` also
-publish to the test group ``io.trittsv.cyclonedds``, using the POM version and C
-``master``. Pull requests and other branches never publish. Remove this branch
-exception and restore the group ``org.eclipse.cyclonedds`` after Eclipse grants
-publishing access. Artifact IDs and Java package names stay unchanged.
-
-The current test version is ``11.0.1``. Once it has been published successfully,
-update the version in all POMs, the consumer fixture and CMake before another
-branch publication; Central cannot overwrite an existing release.
+Pull requests, branch pushes and manual workflow runs never publish.
 
 The publication contains the tested runtime and final compiler JARs, their
 sources/Javadoc JARs, all three POMs, PGP signatures and checksums. The release
@@ -251,7 +243,7 @@ subsequent changes.
 One-time account and signing setup:
 
 #. Create/sign in to an account at https://central.sonatype.com/ and ensure it
-   has publishing permission for the temporary ``io.trittsv.cyclonedds`` namespace.
+   has publishing permission for the ``org.eclipse.cyclonedds`` namespace.
    This requires authorization from the namespace owner; a GitHub repository
    alone does not grant permission to publish Eclipse coordinates.
 #. Generate a Central Portal user token under the account settings. Use its
@@ -284,7 +276,7 @@ One-time account and signing setup:
 
 The signing plugin reads these environment variables directly using its Java
 BC signer; no GPG executable or key import is required on the runner. Secrets
-are supplied only to the publication step. No extra GitHub token permission
+are supplied only to the tag publication step. No extra GitHub token permission
 is required beyond the workflow's existing ``contents: read``.
 
 For example, after all versions are updated to ``11.0.1`` and the C repository
