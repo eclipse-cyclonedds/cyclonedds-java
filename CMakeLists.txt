@@ -392,7 +392,7 @@ install(DIRECTORY tests/consumer/ DESTINATION share/org.eclipse.cyclonedds/consu
 set(CPACK_PACKAGE_NAME org.eclipse.cyclonedds)
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_VENDOR "Cyclone DDS Java contributors")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Experimental OMG Java provider and IDL compiler for Cyclone DDS")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The official Java binding for Eclipse Cyclone DDS")
 set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
 set(CPACK_GENERATOR TGZ ZIP)
 set(CPACK_PACKAGE_CHECKSUM SHA256)

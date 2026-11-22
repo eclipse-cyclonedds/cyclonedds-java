@@ -15,7 +15,7 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
   <groupId>org.eclipse.cyclonedds</groupId>
   <artifactId>org.eclipse.cyclonedds</artifactId>
   <version>11.0.1</version>
-  <description>Experimental Java binding for Eclipse Cyclone DDS</description>
+  <description>The official Java binding for Eclipse Cyclone DDS</description>
   <licenses>
     <license>
       <name>Eclipse Public License 2.0</name>
