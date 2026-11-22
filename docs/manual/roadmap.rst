@@ -122,4 +122,4 @@ its platform libraries and Maven goal. The runtime artifact is
 
 A standards claim still requires choosing a complete DDS profile, mapping every
 applicable requirement to implementation/tests, and closing all required gaps.
-The included normative API sources do not establish full conformance.
+Using the normative API dependency does not establish full conformance.

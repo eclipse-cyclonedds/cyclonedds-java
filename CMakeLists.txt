@@ -36,13 +36,7 @@ include(CMakePackageConfigHelpers)
 
 add_subdirectory(src/jni)
 
-file(GLOB_RECURSE OMG_API_SOURCES CONFIGURE_DEPENDS third_party/omg-dds/src/*.java)
-# Compile the normative API unchanged and independently of provider code.
-set(CMAKE_JAVA_COMPILE_FLAGS --release 8 -encoding UTF-8 -Xlint:none)
-add_jar(omg-dds-api SOURCES ${OMG_API_SOURCES}
-  RESOURCES NAMESPACE META-INF third_party/omg-dds/LICENSE third_party/omg-dds/NOTICE
-  OUTPUT_NAME omg-dds-api)
-install_jar(omg-dds-api DESTINATION share/java)
+include(cmake/OmgDdsApi.cmake)
 set(CMAKE_JAVA_COMPILE_FLAGS --release 17 -encoding UTF-8 -Xlint:all -Werror)
 file(GLOB IDL_JAVA_API_SOURCES CONFIGURE_DEPENDS src/ddsjava/org/omg/type/*.java)
 add_jar(idl4-java-api SOURCES ${IDL_JAVA_API_SOURCES}
@@ -85,14 +79,15 @@ add_custom_command(OUTPUT "${BUNDLED_RUNTIME_JAR}"
   DEPENDS omg-dds-api idl4-java-api org.eclipse.cyclonedds cycloneddsjava CycloneDDS::ddsc
     "$<TARGET_PROPERTY:omg-dds-api,JAR_FILE>" "$<TARGET_PROPERTY:idl4-java-api,JAR_FILE>"
     "$<TARGET_PROPERTY:org.eclipse.cyclonedds,JAR_FILE>" "$<TARGET_FILE:cycloneddsjava>"
-    cmake/BundleRuntime.cmake third_party/cyclonedds/LICENSE third_party/cyclonedds/NOTICE.md
+    cmake/BundleRuntime.cmake LICENSE licenses/omg-dds/LICENSE licenses/omg-dds/NOTICE
+    licenses/cyclonedds/LICENSE licenses/cyclonedds/NOTICE.md
   VERBATIM)
 add_custom_target(bundled-runtime ALL DEPENDS "${BUNDLED_RUNTIME_JAR}")
 install(FILES "${BUNDLED_RUNTIME_JAR}" DESTINATION share/java)
 install(FILES LICENSE DESTINATION share/doc/org.eclipse.cyclonedds)
 install(FILES README.md DESTINATION share/doc/org.eclipse.cyclonedds)
 install(DIRECTORY docs/ DESTINATION share/doc/org.eclipse.cyclonedds/docs)
-install(FILES third_party/omg-dds/LICENSE third_party/omg-dds/NOTICE DESTINATION share/doc/org.eclipse.cyclonedds/omg-dds)
+install(FILES licenses/omg-dds/LICENSE licenses/omg-dds/NOTICE DESTINATION share/doc/org.eclipse.cyclonedds/omg-dds)
 
 add_subdirectory(src/idljava)
 add_subdirectory(src/buildtools)

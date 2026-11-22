@@ -22,9 +22,9 @@ add_custom_command(OUTPUT "${BUNDLED_IDLC_JAR}"
     -P "${PROJECT_SOURCE_DIR}/cmake/BundleIdlc.cmake"
   DEPENDS idlc-launcher idljava CycloneDDS::idlc CycloneDDS::idl CycloneDDS::ddsc
     "$<TARGET_PROPERTY:idlc-launcher,JAR_FILE>" "$<TARGET_FILE:idljava>"
-    "${PROJECT_SOURCE_DIR}/cmake/BundleIdlc.cmake" "${PROJECT_SOURCE_DIR}/third_party/idlc/LICENSE-mcpp"
+    "${PROJECT_SOURCE_DIR}/cmake/BundleIdlc.cmake" "${PROJECT_SOURCE_DIR}/licenses/idlc/LICENSE-mcpp"
     "${PROJECT_SOURCE_DIR}/LICENSE"
-    "${PROJECT_SOURCE_DIR}/third_party/cyclonedds/LICENSE" "${PROJECT_SOURCE_DIR}/third_party/cyclonedds/NOTICE.md"
+    "${PROJECT_SOURCE_DIR}/licenses/cyclonedds/LICENSE" "${PROJECT_SOURCE_DIR}/licenses/cyclonedds/NOTICE.md"
   VERBATIM)
 add_custom_target(bundled-idlc ALL DEPENDS "${BUNDLED_IDLC_JAR}")
 install(FILES "${BUNDLED_IDLC_JAR}" DESTINATION share/java)

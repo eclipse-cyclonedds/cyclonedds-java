@@ -30,12 +30,13 @@ The README therefore does not make an unqualified compliance claim.
 Normative API provenance
 ------------------------
 
-The unmodified Java sources from the OMG DDS-Java
+The unmodified OMG DDS-Java API is resolved from Maven Central as
+``org.omg.dds:java5-psm:1.0``. Its 184 published source files match the
 `normative source archive <https://www.omg.org/spec/DDS-Java/20121201/omgdds_src.zip>`_
-are stored in ``third_party/omg-dds/src``. Its license and notices are retained;
-``ORIGIN.md`` records the archive checksum. The build produces an independent
-``omg-dds-api.jar``. Vendor implementations are under ``org.eclipse.cyclonedds.omg``\ ,
-with no vendor additions to ``org.omg.dds``.
+previously used by this project. License, notices and checksums are retained in
+``licenses/omg-dds``. CMake verifies the published JAR's SHA-256 digest and installs
+it as ``omg-dds-api.jar``. Vendor implementations are under
+``org.eclipse.cyclonedds.omg``\ , with no vendor additions to ``org.omg.dds``.
 
 ``helloworld-java`` and ``omg-api-tests`` compile against the normative DDS API JAR,
 the separate supported IDL4 API interfaces, and generated types, without

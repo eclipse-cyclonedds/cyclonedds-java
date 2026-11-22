@@ -18,9 +18,9 @@ foreach(input IN ITEMS "${OMG_JAR}" "${IDL_JAR}" "${RUNTIME_JAR}")
 endforeach()
 file(REMOVE "${STAGING}/META-INF/MANIFEST.MF")
 file(MAKE_DIRECTORY "${STAGING}/META-INF/omg-dds" "${STAGING}/META-INF/cyclonedds")
-file(COPY "${SOURCE_DIR}/third_party/omg-dds/LICENSE" "${SOURCE_DIR}/third_party/omg-dds/NOTICE"
+file(COPY "${SOURCE_DIR}/licenses/omg-dds/LICENSE" "${SOURCE_DIR}/licenses/omg-dds/NOTICE"
   DESTINATION "${STAGING}/META-INF/omg-dds")
-file(COPY "${SOURCE_DIR}/third_party/cyclonedds/LICENSE" "${SOURCE_DIR}/third_party/cyclonedds/NOTICE.md"
+file(COPY "${SOURCE_DIR}/licenses/cyclonedds/LICENSE" "${SOURCE_DIR}/licenses/cyclonedds/NOTICE.md"
   DESTINATION "${STAGING}/META-INF/cyclonedds")
 set(native_dir "${STAGING}/org/eclipse/cyclonedds/native/${PLATFORM}")
 file(MAKE_DIRECTORY "${native_dir}")

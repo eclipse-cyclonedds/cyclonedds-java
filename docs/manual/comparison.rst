@@ -24,7 +24,7 @@ Yes. OMG DDS-Java 1.0 defines ``ServiceEnvironment`` and provider selection thro
 ``org.omg.dds.serviceClassName``. OpenSplice's Java 5 API implements this model in
 `OsplServiceEnvironment.java <https://github.com/ADLINK-IST/opensplice/blob/a4818af5f5931834501055cd7ce2339de4f0af13/src/api/dcps/java5/common/java/code/org/opensplice/dds/core/OsplServiceEnvironment.java>`_.
 Our ``CycloneServiceEnvironment`` follows the same standard bootstrap mechanism.
-The normative sources are retained unchanged; the provider property is required
+The published normative API is used unchanged; the provider property is required
 by their ``ServiceEnvironment.createInstance(...)`` implementation.
 
 The `RTI Java reference <https://community.rti.com/static/documentation/connext-dds/current/doc/api/connext_dds/api_java/RTI_ConnextDDS_ApiReferenceJava.pdf>`_

@@ -34,19 +34,19 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
     <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.omg.dds</groupId><artifactId>java5-psm</artifactId><version>1.0</version>
+    </dependency>
+  </dependencies>
   <build>
     <sourceDirectory>${project.basedir}/src/ddsjava</sourceDirectory>
     <resources><resource><directory>${project.basedir}</directory><targetPath>META-INF</targetPath>
       <includes><include>LICENSE</include></includes>
-    </resource><resource><directory>third_party/omg-dds</directory><targetPath>META-INF/omg-dds</targetPath>
+    </resource><resource><directory>licenses/omg-dds</directory><targetPath>META-INF/omg-dds</targetPath>
       <includes><include>LICENSE</include><include>NOTICE</include></includes>
     </resource></resources>
     <plugins><plugin>
-    <groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.1</version>
-    <executions><execution><id>omg-api</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals>
-      <configuration><sources><source>third_party/omg-dds/src</source></sources></configuration>
-    </execution></executions>
-  </plugin><plugin>
     <groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version>
   </plugin></plugins></build>
   <profiles><profile>

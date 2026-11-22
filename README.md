@@ -151,6 +151,9 @@ libraries automatically; application code needs no native search-path setup.
 
 Requirements: JDK 17+, CMake 3.21+, a C11 compiler and a Cyclone DDS installation
 with `idlc`, IDL/DDSI development headers and type-library support.
+The first CMake configuration resolves `org.omg.dds:java5-psm:1.0` from the local
+Maven cache or Maven Central and verifies its SHA-256 digest. For an offline build,
+pass `-DOMG_DDS_API_JAR=/path/to/java5-psm-1.0.jar`. No OMG API sources are vendored.
 Branch and pull-request CI builds use the latest Cyclone DDS `master`; Java tag
 builds use the exact same tag in the C core repository and fail if it is missing.
 The selected core commit is resolved once per workflow for all platforms.
