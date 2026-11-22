@@ -43,8 +43,6 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
     <sourceDirectory>${project.basedir}/src/ddsjava</sourceDirectory>
     <resources><resource><directory>${project.basedir}</directory><targetPath>META-INF</targetPath>
       <includes><include>LICENSE</include></includes>
-    </resource><resource><directory>licenses/omg-dds</directory><targetPath>META-INF/omg-dds</targetPath>
-      <includes><include>LICENSE</include><include>NOTICE</include></includes>
     </resource></resources>
     <plugins><plugin>
     <groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version>

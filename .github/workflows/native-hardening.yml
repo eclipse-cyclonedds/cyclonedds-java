@@ -39,6 +39,7 @@ jobs:
           cmake --build "$RUNNER_TEMP/core-build" --parallel 4
           cmake --install "$RUNNER_TEMP/core-build"
           cmake -S . -B build -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/core-install" \
+            -DCYCLONEDDS_CORE_SOURCE_DIR="$RUNNER_TEMP/core" \
             -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_C_FLAGS=$FLAGS" -DBUILD_EXAMPLES=OFF
           cmake --build build --parallel 4
       - name: Run functional and resource stress tests

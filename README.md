@@ -154,6 +154,8 @@ with `idlc`, IDL/DDSI development headers and type-library support.
 The first CMake configuration resolves `org.omg.dds:java5-psm:1.0` from the local
 Maven cache or Maven Central and verifies its SHA-256 digest. For an offline build,
 pass `-DOMG_DDS_API_JAR=/path/to/java5-psm-1.0.jar`. No OMG API sources are vendored.
+Native packaging also needs `-DCYCLONEDDS_CORE_SOURCE_DIR=/path/to/core` to collect
+notices from the matching core checkout. OMG notices come from its Maven JAR.
 Branch and pull-request CI builds use the latest Cyclone DDS `master`; Java tag
 builds use the exact same tag in the C core repository and fail if it is missing.
 The selected core commit is resolved once per workflow for all platforms.
@@ -171,7 +173,8 @@ cmake --install core-build
 Then build and install the binding:
 
 ```sh
-cmake -S . -B build -DCMAKE_PREFIX_PATH="$PWD/core-install"
+cmake -S . -B build -DCMAKE_PREFIX_PATH="$PWD/core-install" \
+  -DCYCLONEDDS_CORE_SOURCE_DIR="$PWD/core"
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 cmake --install build --prefix /path/to/java-binding

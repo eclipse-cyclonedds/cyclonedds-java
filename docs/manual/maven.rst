@@ -158,8 +158,11 @@ notices. The OMG API sources are not stored in this repository. CMake resolves
 the same published JAR from its build cache, the default local Maven repository,
 or Maven Central (with the Google-hosted Central mirror as a fallback), and
 verifies a pinned SHA-256 digest. To configure without network access, supply
-``-DOMG_DDS_API_JAR=/path/to/java5-psm-1.0.jar``. Dependency licenses, notices and
-provenance are in ``licenses/``.
+``-DOMG_DDS_API_JAR=/path/to/java5-psm-1.0.jar``. OMG license/notice files come
+from that JAR. Native packaging takes core notices and the MCPP license header
+from the matching checkout supplied with
+``-DCYCLONEDDS_CORE_SOURCE_DIR=/path/to/cyclonedds``. The root project
+``LICENSE`` also covers the bundled core under the shared project license terms.
 
 Compiler sources and the compiler Maven module live in ``src/buildtools``. The
 repository root contains the runtime Maven module; ``maven/pom.xml`` builds both.

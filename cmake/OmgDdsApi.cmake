@@ -48,3 +48,12 @@ set_target_properties(omg-dds-api PROPERTIES
   IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/omg-dds-api.jar"
   JAR_FILE "${CMAKE_BINARY_DIR}/omg-dds-api.jar")
 install(FILES "${CMAKE_BINARY_DIR}/omg-dds-api.jar" DESTINATION share/java)
+set(OMG_DDS_API_NOTICES_DIR "${CMAKE_BINARY_DIR}/dependency-notices/omg-dds")
+file(MAKE_DIRECTORY "${OMG_DDS_API_NOTICES_DIR}")
+execute_process(COMMAND "${Java_JAR_EXECUTABLE}" --extract --file "${CMAKE_BINARY_DIR}/omg-dds-api.jar" LICENSE NOTICE
+  WORKING_DIRECTORY "${OMG_DDS_API_NOTICES_DIR}" COMMAND_ERROR_IS_FATAL ANY)
+foreach(_notice IN ITEMS LICENSE NOTICE)
+  if(NOT EXISTS "${OMG_DDS_API_NOTICES_DIR}/${_notice}")
+    message(FATAL_ERROR "The published OMG API JAR is missing ${_notice}")
+  endif()
+endforeach()

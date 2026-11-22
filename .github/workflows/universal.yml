@@ -130,6 +130,7 @@ jobs:
                   print("::error::" + message, flush=True)
                   raise SystemExit(result.returncode)
           run(["cmake", "-S", ".", "-B", "build", "-DCMAKE_PREFIX_PATH=" + prefix,
+               "-DCYCLONEDDS_CORE_SOURCE_DIR=" + (Path(os.environ["RUNNER_TEMP"]) / "core").as_posix(),
                "-DJAVA_HOME=" + Path(os.environ["JAVA_HOME"]).as_posix(), "-DBUILD_MAVEN_TESTING=ON"])
           run(["cmake", "--build", "build", "--parallel", "4"])
           run(["ctest", "--test-dir", "build", "--output-on-failure", "-j", "2",

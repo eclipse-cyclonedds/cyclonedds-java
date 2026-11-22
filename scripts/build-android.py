@@ -74,9 +74,8 @@ def main():
     shutil.copy2(library, destination)
     notices = package / "licenses"
     notices.mkdir()
-    shutil.copy2(root / "LICENSE", notices / "LICENSE-java")
-    for name in ("LICENSE", "NOTICE.md"):
-        shutil.copy2(root / "licenses" / "cyclonedds" / name, notices / name)
+    shutil.copy2(root / "LICENSE", notices / "LICENSE")
+    shutil.copy2(source / "NOTICE.md", notices / "NOTICE.md")
     (package / "elf-report.txt").write_text(report)
     (package / "build-info.json").write_text(json.dumps({
         "abi": args.abi, "android_api": 28, "core_ref": args.ref if args.source is None else None, "core_commit": core_commit,

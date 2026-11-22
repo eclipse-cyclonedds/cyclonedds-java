@@ -107,6 +107,12 @@ is macOS ARM64; remote workflow results must be checked separately.
 Unmodified core and reproducibility
 -----------------------------------
 
+Supply ``-DCYCLONEDDS_CORE_SOURCE_DIR=/path/to/cyclonedds`` when configuring
+the binding to package notices from the matching core checkout. The root project
+license is reused for the core; compiler packaging extracts the MCPP license
+header from that checkout. OMG API license/notice files come from its Maven JAR.
+No separate source-tree directory of copied dependency licenses is needed.
+
 Branch and pull-request builds use the latest Cyclone DDS ``master``. When the
 Java wrapper is built from a tag, CI requires the exact same tag in the C core
 repository; a missing tag fails the workflow without falling back to master.

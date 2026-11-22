@@ -109,8 +109,8 @@ Java application and generation path
              -> Cyclone DDS core -> RTPS
 
 The normative API is the published ``org.omg.dds:java5-psm:1.0`` dependency.
-Its upstream Apache-2.0 license, notices and checksums are retained under
-``licenses/omg-dds``. CMake installs the checked dependency as ``omg-dds-api.jar``.
+Its upstream Apache-2.0 license and notices are extracted from that JAR during
+packaging. CMake installs the checked dependency as ``omg-dds-api.jar``.
 ``CycloneServiceEnvironment`` is selected with the standard
 ``org.omg.dds.serviceClassName`` property. Factories and type support are concrete
 provider classes; entities are exposed through Java proxies implementing the
@@ -137,8 +137,6 @@ mapped accessors. :doc:`Standards coverage <standards>` explains the remaining g
 
    * - Directory
      - Responsibility
-   * - ``licenses``\
-     - Dependency licenses, notices and provenance
    * - ``src/ddsjava/.../omg``\
      - Service provider, entities, supported QoS, values and samples
    * - ``src/idljava``\

@@ -37,6 +37,7 @@ include(CMakePackageConfigHelpers)
 add_subdirectory(src/jni)
 
 include(cmake/OmgDdsApi.cmake)
+include(cmake/CoreNotices.cmake)
 set(CMAKE_JAVA_COMPILE_FLAGS --release 17 -encoding UTF-8 -Xlint:all -Werror)
 file(GLOB IDL_JAVA_API_SOURCES CONFIGURE_DEPENDS src/ddsjava/org/omg/type/*.java)
 add_jar(idl4-java-api SOURCES ${IDL_JAVA_API_SOURCES}
@@ -75,19 +76,23 @@ add_custom_command(OUTPUT "${BUNDLED_RUNTIME_JAR}"
     "-DCORE_LIBRARY=${BUNDLE_CORE_LIBRARY}" "-DJNI_LIBRARY=$<TARGET_FILE:cycloneddsjava>"
     "-DVERSION=${PROJECT_VERSION}" "-DPLATFORM=${JAVA_NATIVE_PLATFORM}" "-DJAR=${Java_JAR_EXECUTABLE}"
     "-DOUTPUT=${BUNDLED_RUNTIME_JAR}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+    "-DOMG_NOTICES=${OMG_DDS_API_NOTICES_DIR}" "-DCORE_NOTICES=${CORE_NOTICES_DIR}"
     -P "${PROJECT_SOURCE_DIR}/cmake/BundleRuntime.cmake"
   DEPENDS omg-dds-api idl4-java-api org.eclipse.cyclonedds cycloneddsjava CycloneDDS::ddsc
     "$<TARGET_PROPERTY:omg-dds-api,JAR_FILE>" "$<TARGET_PROPERTY:idl4-java-api,JAR_FILE>"
     "$<TARGET_PROPERTY:org.eclipse.cyclonedds,JAR_FILE>" "$<TARGET_FILE:cycloneddsjava>"
-    cmake/BundleRuntime.cmake LICENSE licenses/omg-dds/LICENSE licenses/omg-dds/NOTICE
-    licenses/cyclonedds/LICENSE licenses/cyclonedds/NOTICE.md
+    cmake/BundleRuntime.cmake LICENSE "${OMG_DDS_API_NOTICES_DIR}/LICENSE" "${OMG_DDS_API_NOTICES_DIR}/NOTICE"
+    "${CORE_NOTICES_DIR}/NOTICE.md"
   VERBATIM)
 add_custom_target(bundled-runtime ALL DEPENDS "${BUNDLED_RUNTIME_JAR}")
 install(FILES "${BUNDLED_RUNTIME_JAR}" DESTINATION share/java)
 install(FILES LICENSE DESTINATION share/doc/org.eclipse.cyclonedds)
 install(FILES README.md DESTINATION share/doc/org.eclipse.cyclonedds)
 install(DIRECTORY docs/ DESTINATION share/doc/org.eclipse.cyclonedds/docs)
-install(FILES licenses/omg-dds/LICENSE licenses/omg-dds/NOTICE DESTINATION share/doc/org.eclipse.cyclonedds/omg-dds)
+install(FILES "${OMG_DDS_API_NOTICES_DIR}/LICENSE" "${OMG_DDS_API_NOTICES_DIR}/NOTICE"
+  DESTINATION share/doc/org.eclipse.cyclonedds/omg-dds)
+install(FILES "${CORE_NOTICES_DIR}/NOTICE.md" DESTINATION share/doc/org.eclipse.cyclonedds/cyclonedds)
+install(FILES "${CORE_NOTICES_DIR}/LICENSE-mcpp" DESTINATION share/doc/org.eclipse.cyclonedds/idlc)
 
 add_subdirectory(src/idljava)
 add_subdirectory(src/buildtools)
