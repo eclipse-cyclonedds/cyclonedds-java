@@ -193,14 +193,3 @@ This installs `org.eclipse.cyclonedds` (runtime) and `org.eclipse.cyclonedds.idl
 (compiler plus Maven integration) into the local Maven repository. It does not
 publish to a remote repository. See [Maven packaging and validation](docs/manual/maven.rst)
 and [distribution details](docs/manual/distribution.rst).
-
-## Mobile CI
-
-Android JNI is cross-built for ARM64, x86-64, ARMv7 and x86 using NDK
-27.2.12479018 (API 28), with ELF architecture and 16 KB alignment checks. Separate
-`android-jni-<abi>` workflow artifacts contain native libraries and notices.
-These are experimental native builds; Android Java integration and runtime tests
-are still needed. They are not included in the desktop universal JARs.
-
-iOS ARM64 needs a Java/AOT runtime integration that this JNI project does not yet
-provide. See [mobile build details](docs/manual/distribution.rst).
