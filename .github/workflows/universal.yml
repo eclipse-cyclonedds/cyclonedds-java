@@ -1,0 +1,316 @@
+# Copyright(c) 2026 Sven Trittler
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License v. 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Eclipse Distribution License
+# v. 1.0 which is available at
+# http://www.eclipse.org/org/documents/edl-v10.php.
+#
+# SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
+
+name: Universal Java distribution
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+env:
+  # Also inherited by Maven subprocesses in the isolated consumer tests.
+  MAVEN_ARGS: --settings "${{ github.workspace }}/.github/maven-settings.xml"
+jobs:
+  prepare:
+    name: Select Cyclone DDS core
+    runs-on: ubuntu-24.04
+    outputs:
+      core-commit: ${{ steps.core.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate release version
+        if: github.ref_type == 'tag'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/check-release-tag.py "$RELEASE_TAG"
+      - name: Check out latest master or matching release tag
+        uses: actions/checkout@v7
+        with:
+          repository: eclipse-cyclonedds/cyclonedds
+          path: core
+          ref: ${{ github.ref_type == 'tag' && format('refs/tags/{0}', github.ref_name) || 'refs/heads/master' }}
+      - name: Record core commit for all platform builds
+        id: core
+        shell: bash
+        run: |
+          COMMIT=$(git -C core rev-parse HEAD)
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Cyclone DDS core: $COMMIT"
+  platform:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux-x86_64
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            platform: linux-aarch64
+            arch: aarch64
+          - runner: macos-15
+            platform: macos-aarch64
+            arch: aarch64
+          - runner: windows-2025
+            platform: windows-x86_64
+            arch: x64
+            msvc_arch: amd64
+          - runner: windows-11-arm
+            platform: windows-aarch64
+            arch: aarch64
+            msvc_arch: arm64
+    timeout-minutes: 35
+    runs-on: ${{ matrix.runner }}
+    env:
+      CMAKE_GENERATOR: ${{ startsWith(matrix.platform, 'windows-') && 'Ninja' || 'Unix Makefiles' }}
+      CMAKE_BUILD_TYPE: Release
+      CYCLONEDDS_CORE_COMMIT: ${{ needs.prepare.outputs.core-commit }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          # Temurin 17 has no Windows ARM64 build; keep Java 17 with Microsoft's native JDK.
+          distribution: ${{ matrix.runner == 'windows-11-arm' && 'microsoft' || 'temurin' }}
+          java-version: '17'
+          architecture: ${{ matrix.arch }}
+      - name: Configure native MSVC
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          MSVC_ARCH: ${{ matrix.msvc_arch }}
+        run: |
+          $before = @{}
+          Get-ChildItem Env: | ForEach-Object { $before[$_.Name] = $_.Value }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.${{ matrix.msvc_arch == 'arm64' && 'ARM64' || 'x86.x64' }} -property installationPath
+          if (-not $installation) { throw 'Visual Studio C++ tools were not found' }
+          & "$installation\Common7\Tools\Launch-VsDevShell.ps1" -Arch $env:MSVC_ARCH -HostArch $env:MSVC_ARCH -SkipAutomaticLocation
+          Get-ChildItem Env: | Where-Object { $before[$_.Name] -cne $_.Value } | ForEach-Object {
+              "$($_.Name)=$($_.Value)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+      - name: Build matching Cyclone DDS core
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          source, build, install = (root / name for name in ("core", "core-build", "core-install"))
+          def run(*args):
+              subprocess.run(list(map(str, args)), check=True)
+          run("git", "clone", "https://github.com/eclipse-cyclonedds/cyclonedds.git", source)
+          run("git", "-C", source, "checkout", os.environ["CYCLONEDDS_CORE_COMMIT"])
+          run("cmake", "-S", source, "-B", build, "-DCMAKE_INSTALL_PREFIX=" + install.as_posix(),
+              "-DBUILD_TESTING=OFF", "-DBUILD_EXAMPLES=OFF", "-DENABLE_SECURITY=OFF", "-DENABLE_SSL=OFF")
+          run("cmake", "--build", build, "--parallel", "4")
+          run("cmake", "--install", build)
+          if os.name == "nt":
+              with open(os.environ["GITHUB_PATH"], "a", encoding="utf-8") as output:
+                  print(install / "bin", file=output)
+      - name: Build and test platform components
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+
+          prefix = (Path(os.environ["RUNNER_TEMP"]) / "core-install").as_posix()
+          def run(command):
+              result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                      text=True, encoding="utf-8", errors="replace")
+              print(result.stdout, end="", flush=True)
+              if result.returncode:
+                  message = result.stdout[-12000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print("::error::" + message, flush=True)
+                  raise SystemExit(result.returncode)
+          run(["cmake", "-S", ".", "-B", "build", "-DCMAKE_PREFIX_PATH=" + prefix,
+               "-DCYCLONEDDS_CORE_SOURCE_DIR=" + (Path(os.environ["RUNNER_TEMP"]) / "core").as_posix(),
+               "-DJAVA_HOME=" + Path(os.environ["JAVA_HOME"]).as_posix(), "-DBUILD_MAVEN_TESTING=ON"])
+          run(["cmake", "--build", "build", "--parallel", "4"])
+          run(["ctest", "--test-dir", "build", "--output-on-failure", "-j", "2",
+               "--output-junit", "test-results.xml"])
+      - name: Report failed tests
+        if: failure()
+        shell: python
+        run: |
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          report = Path("build/test-results.xml")
+          if report.is_file():
+              for case in ET.parse(report).iter("testcase"):
+                  if case.find("failure") is None:
+                      continue
+                  output = case.findtext("system-out", "No test output recorded.")
+                  message = (case.attrib["name"] + "\n" + output)[-12000:]
+                  message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print("::error::" + message)
+      - name: Save test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostics-${{ matrix.platform }}
+          path: |
+            build/Testing/Temporary/*.log
+            build/test-results.xml
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        with:
+          name: platform-${{ matrix.platform }}
+          path: build/*-${{ matrix.platform }}.jar
+          if-no-files-found: error
+  assemble:
+    needs: platform
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: |
+            pom.xml
+            maven/pom.xml
+            src/buildtools/pom.xml
+            .github/maven-settings.xml
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: platform-*
+          path: platform-inputs
+      - name: Assemble all required platforms and Maven artifacts
+        shell: bash
+        run: |
+          VERSION=$(python3 -c 'import xml.etree.ElementTree as E; print(E.parse("pom.xml").getroot().find("{http://maven.apache.org/POM/4.0.0}version").text)')
+          mkdir -p dist
+          for KIND in runtime compiler; do
+            if [ "$KIND" = runtime ]; then ARTIFACT=org.eclipse.cyclonedds; else ARTIFACT=org.eclipse.cyclonedds.idlc; fi
+            java -cp "platform-inputs/platform-linux-x86_64/org.eclipse.cyclonedds.idlc-${VERSION}-linux-x86_64.jar" \
+              org.eclipse.cyclonedds.idlc.UniversalJar --kind "$KIND" \
+              --output "dist/${ARTIFACT}-${VERSION}.jar" --version "$VERSION" \
+              --platforms linux-x86_64,linux-aarch64,macos-aarch64,windows-x86_64,windows-aarch64 --input-dir platform-inputs
+          done
+          mvn -B -ntp -f maven/pom.xml -Prelease-artifacts \
+            "-Dcyclonedds.runtime.jar=$PWD/dist/org.eclipse.cyclonedds-${VERSION}.jar" \
+            "-Dcyclonedds.idlc.jar=$PWD/dist/org.eclipse.cyclonedds.idlc-${VERSION}.jar" package
+          cp "src/buildtools/target/org.eclipse.cyclonedds.idlc-${VERSION}.jar" dist/
+          cp target/*-sources.jar target/*-javadoc.jar dist/
+          cp src/buildtools/target/*-sources.jar src/buildtools/target/*-javadoc.jar dist/
+          cp pom.xml "dist/org.eclipse.cyclonedds-${VERSION}.pom"
+          cp maven/pom.xml "dist/org.eclipse.cyclonedds-build-${VERSION}.pom"
+          cp src/buildtools/pom.xml "dist/org.eclipse.cyclonedds.idlc-${VERSION}.pom"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: universal-java
+          path: dist/*
+          if-no-files-found: error
+  verify-universal:
+    needs: assemble
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+          - runner: macos-15
+            arch: aarch64
+          - runner: windows-2025
+            arch: x64
+          - runner: windows-11-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          # Temurin 17 has no Windows ARM64 build; keep Java 17 with Microsoft's native JDK.
+          distribution: ${{ matrix.runner == 'windows-11-arm' && 'microsoft' || 'temurin' }}
+          java-version: '17'
+          architecture: ${{ matrix.arch }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: universal-java
+          path: release
+      - name: Run the same runtime/compiler pair on each host
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import xml.etree.ElementTree as ET
+
+          version = ET.parse("pom.xml").getroot().find("{http://maven.apache.org/POM/4.0.0}version").text
+          root = Path.cwd()
+          java = Path(os.environ["JAVA_HOME"]) / "bin"
+          subprocess.run([sys.executable, "tests/idlc_bundle.py", str(java / "java"), str(java / "javac"),
+                          str(root / "release" / f"org.eclipse.cyclonedds.idlc-{version}.jar"),
+                          str(root / "release" / f"org.eclipse.cyclonedds-{version}.jar"), str(root)], check=True)
+
+  publish:
+    name: Publish release to Maven Central
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: verify-universal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: |
+            pom.xml
+            maven/pom.xml
+            src/buildtools/pom.xml
+            .github/maven-settings.xml
+      # The Central publishing extension requires Maven 3.
+      - uses: stCarolas/setup-maven@d6af6abeda15e98926a57b5aa970a96bb37f97d1 # v5
+        with:
+          maven-version: '3.9.9'
+      - uses: actions/download-artifact@v8
+        with:
+          name: universal-java
+          path: release
+      - name: Sign and publish the verified universal artifacts
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          MAVEN_GPG_KEY_FINGERPRINT: ${{ secrets.MAVEN_GPG_KEY_FINGERPRINT }}
+        shell: bash
+        run: |
+          for KEY in MAVEN_CENTRAL_USERNAME MAVEN_CENTRAL_PASSWORD MAVEN_GPG_KEY MAVEN_GPG_PASSPHRASE; do
+            if [ -z "${!KEY}" ]; then echo "::error::Missing GitHub Actions secret: $KEY"; exit 1; fi
+          done
+          python3 scripts/check-release-tag.py "$RELEASE_TAG"
+          VERSION=$RELEASE_TAG
+          mvn -B -ntp -f maven/pom.xml -Prelease-artifacts,central-release \
+            "-Dcyclonedds.runtime.jar=$PWD/release/org.eclipse.cyclonedds-${VERSION}.jar" \
+            "-Dcyclonedds.idlc.verifiedJar=$PWD/release/org.eclipse.cyclonedds.idlc-${VERSION}.jar" \
+            deploy
+      - name: Save signed deployment bundle
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maven-central-deployment
+          path: '**/target/central-publishing/*.zip'
+          if-no-files-found: ignore
