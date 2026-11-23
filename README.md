@@ -5,6 +5,8 @@
 
 The official Java binding for [Eclipse Cyclone DDS](https://github.com/eclipse-cyclonedds/cyclonedds) using the **official OMG DDS-Java API** and generated IDL4-Java types.
 
+> **Experimental:** This binding is under active development.
+
 Two artifacts are provided:
 
 * **`org.eclipse.cyclonedds`**: Java API, provider, DDS core and JNI libraries for runtime use.
