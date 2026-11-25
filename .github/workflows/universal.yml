@@ -11,8 +11,11 @@
 name: Universal Java distribution
 on:
   push:
+    branches:
+      - '**'
   pull_request:
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
@@ -261,56 +264,3 @@ jobs:
           subprocess.run([sys.executable, "tests/idlc_bundle.py", str(java / "java"), str(java / "javac"),
                           str(root / "release" / f"org.eclipse.cyclonedds.idlc-{version}.jar"),
                           str(root / "release" / f"org.eclipse.cyclonedds-{version}.jar"), str(root)], check=True)
-
-  publish:
-    name: Publish release to Maven Central
-    if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: verify-universal
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-          cache-dependency-path: |
-            pom.xml
-            maven/pom.xml
-            src/buildtools/pom.xml
-            .github/maven-settings.xml
-      # The Central publishing extension requires Maven 3.
-      - uses: stCarolas/setup-maven@d6af6abeda15e98926a57b5aa970a96bb37f97d1 # v5
-        with:
-          maven-version: '3.9.9'
-      - uses: actions/download-artifact@v8
-        with:
-          name: universal-java
-          path: release
-      - name: Sign and publish the verified universal artifacts
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          MAVEN_GPG_KEY: ${{ secrets.MAVEN_GPG_KEY }}
-          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
-          MAVEN_GPG_KEY_FINGERPRINT: ${{ secrets.MAVEN_GPG_KEY_FINGERPRINT }}
-        shell: bash
-        run: |
-          for KEY in MAVEN_CENTRAL_USERNAME MAVEN_CENTRAL_PASSWORD MAVEN_GPG_KEY MAVEN_GPG_PASSPHRASE; do
-            if [ -z "${!KEY}" ]; then echo "::error::Missing GitHub Actions secret: $KEY"; exit 1; fi
-          done
-          python3 scripts/check-release-tag.py "$RELEASE_TAG"
-          VERSION=$RELEASE_TAG
-          mvn -B -ntp -f maven/pom.xml -Prelease-artifacts,central-release \
-            "-Dcyclonedds.runtime.jar=$PWD/release/org.eclipse.cyclonedds-${VERSION}.jar" \
-            "-Dcyclonedds.idlc.verifiedJar=$PWD/release/org.eclipse.cyclonedds.idlc-${VERSION}.jar" \
-            deploy
-      - name: Save signed deployment bundle
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: maven-central-deployment
-          path: '**/target/central-publishing/*.zip'
-          if-no-files-found: ignore

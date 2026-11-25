@@ -67,8 +67,8 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
       <build><plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId><artifactId>maven-gpg-plugin</artifactId><version>3.2.8</version>
-          <!-- The BC signer reads MAVEN_GPG_KEY and MAVEN_GPG_PASSPHRASE directly. -->
-          <configuration><signer>bc</signer><bestPractices>true</bestPractices></configuration>
+          <!-- GnuPG uses the imported key and reads MAVEN_GPG_PASSPHRASE directly. -->
+          <configuration><bestPractices>true</bestPractices></configuration>
           <executions><execution><id>sign</id><phase>verify</phase><goals><goal>sign</goal></goals></execution></executions>
         </plugin>
         <plugin>
