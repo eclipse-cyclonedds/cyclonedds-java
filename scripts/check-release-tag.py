@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 def check(tag, root):
     version = tag
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-        raise ValueError("Release tags must be X.Y.Z, for example 11.0.1 (no v prefix or snapshots).")
+        raise ValueError("Release tags must be X.Y.Z, for example 11.1.0 (no v prefix or snapshots).")
     ns = {"m": "http://maven.apache.org/POM/4.0.0"}
     versions = {}
     for name in ("pom.xml", "maven/pom.xml", "src/buildtools/pom.xml"):

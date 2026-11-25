@@ -53,7 +53,7 @@ Direct invocation
 .. code-block:: sh
 
    idlc -l /path/to/binding/lib/libcycloneddsidljava.so -o generated Message.idl
-   javac -cp org.eclipse.cyclonedds-11.0.1.jar -d classes generated/Example/Message.java
+   javac -cp org.eclipse.cyclonedds-11.1.0.jar -d classes generated/Example/Message.java
    jar --create --file message-types.jar -C classes .
 
 Use ``.dylib`` on macOS. The backend is needed only while generating source.

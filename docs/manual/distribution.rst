@@ -21,17 +21,17 @@ Build and validate the binding before producing archives:
    ctest --test-dir build --output-on-failure
    cmake --build build --target package
 
-CPack creates platform-specific ``org.eclipse.cyclonedds-11.0.1-*.tar.gz`` and ``.zip``
+CPack creates platform-specific ``org.eclipse.cyclonedds-11.1.0-*.tar.gz`` and ``.zip``
 files and accompanying SHA-256 checksum files in the build directory. These are
 experimental development artifacts, not official Eclipse releases. Nothing is
 published by this command. Archive bit-for-bit reproducibility is not established.
 
 A distribution includes:
 
-* ``share/java/org.eclipse.cyclonedds-11.0.1.jar``: API, provider, JNI and native runtimes.
-* ``share/java/org.eclipse.cyclonedds.idlc-11.0.1.jar``: compiler launcher, compilers and their platform libraries.
-* ``share/java/org.eclipse.cyclonedds-11.0.1-<platform>.jar``: per-platform runtime assembly input.
-* ``share/java/org.eclipse.cyclonedds.idlc-11.0.1-<platform>.jar``: per-platform compiler assembly input.
+* ``share/java/org.eclipse.cyclonedds-11.1.0.jar``: API, provider, JNI and native runtimes.
+* ``share/java/org.eclipse.cyclonedds.idlc-11.1.0.jar``: compiler launcher, compilers and their platform libraries.
+* ``share/java/org.eclipse.cyclonedds-11.1.0-<platform>.jar``: per-platform runtime assembly input.
+* ``share/java/org.eclipse.cyclonedds.idlc-11.1.0-<platform>.jar``: per-platform compiler assembly input.
 * ``share/java/omg-dds-api.jar``\ : unmodified normative DDS-Java API and Apache notices.
 * ``share/java/idl4-java-api.jar``\ : supported sequence interfaces and project license.
 * ``share/java/org.eclipse.cyclonedds.jar``\ : provider, codec runtime and project notices.
@@ -146,7 +146,7 @@ With CMake 3.21+, Python 3 and Android NDK ``27.2.12479018`` installed:
 
 The script targets Android API 28 with 16 KB page support. It builds the C core
 and statically links it into JNI. By default it uses core ``master``; supply
-``--ref 11.0.1`` for that release, or ``--source /path/to/cyclonedds`` to use an
+``--ref 11.1.0`` for that release, or ``--source /path/to/cyclonedds`` to use an
 existing core checkout without fetching it. ``BUILD_NATIVE_ONLY=ON`` configures
 only JNI, without requiring a host JDK, IDL compiler, examples or JVM tests.
 
