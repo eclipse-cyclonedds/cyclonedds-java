@@ -12,7 +12,7 @@
 Maven: runtime and IDL compiler
 ===============================
 
-The distribution has two JAR artifacts, both version ``11.0.1`` in Maven group
+The distribution has two JAR artifacts, both version ``11.1.0`` in Maven group
 ``org.eclipse.cyclonedds``:
 
 * ``org.eclipse.cyclonedds``: Java API, provider, DDS core and JNI runtime libraries.
@@ -47,7 +47,7 @@ Declare the runtime as a dependency and the compiler as a build tool:
 
    <properties>
      <maven.compiler.release>17</maven.compiler.release>
-     <cyclonedds.version>11.0.1</cyclonedds.version>
+     <cyclonedds.version>11.1.0</cyclonedds.version>
    </properties>
    <dependencies>
      <dependency>
@@ -84,17 +84,17 @@ are needed in the POM. The complete example is in ``tests/maven-consumer``.
 What is in each file
 --------------------
 
-``org.eclipse.cyclonedds-11.0.1.jar`` contains only the Java/runtime components
+``org.eclipse.cyclonedds-11.1.0.jar`` contains only the Java/runtime components
 needed by applications. At runtime include this JAR and the application classes;
 Maven and the compiler are not needed.
 
-``org.eclipse.cyclonedds.idlc-11.0.1.jar`` contains the CLI, compilers and their
+``org.eclipse.cyclonedds.idlc-11.1.0.jar`` contains the CLI, compilers and their
 native dependencies. Its Maven APIs are declared ``provided``; they are supplied
 by Maven and are not bundled. The CLI can run without Maven libraries:
 
 .. code-block:: sh
 
-   java -jar org.eclipse.cyclonedds.idlc-11.0.1.jar -o generated Message.idl
+   java -jar org.eclipse.cyclonedds.idlc-11.1.0.jar -o generated Message.idl
 
 The launcher chooses the host's Java backend and forwards ``idlc`` options.
 ``--print-platform`` reports the detected host without extracting tools.
@@ -171,8 +171,8 @@ published as a POM, not as a third JAR.
 
 A CMake build creates two distribution JARs:
 
-* ``org.eclipse.cyclonedds-11.0.1.jar``: runtime.
-* ``org.eclipse.cyclonedds.idlc-11.0.1.jar``: compiler toolchain.
+* ``org.eclipse.cyclonedds-11.1.0.jar``: runtime.
+* ``org.eclipse.cyclonedds.idlc-11.1.0.jar``: compiler toolchain.
 
 The per-platform files with ``-<platform>`` suffixes are intermediate assembly
 inputs. ``UNIVERSAL_BUNDLE_INPUTS`` accepts additional intermediate JARs;
@@ -181,13 +181,13 @@ local host. The assembler emits each kind separately:
 
 .. code-block:: sh
 
-   java -cp org.eclipse.cyclonedds.idlc-11.0.1-linux-x86_64.jar \
+   java -cp org.eclipse.cyclonedds.idlc-11.1.0-linux-x86_64.jar \
      org.eclipse.cyclonedds.idlc.UniversalJar --kind runtime \
-     --output org.eclipse.cyclonedds-11.0.1.jar --version 11.0.1 \
+     --output org.eclipse.cyclonedds-11.1.0.jar --version 11.1.0 \
      --platforms linux-x86_64,linux-aarch64,macos-aarch64,windows-x86_64,windows-aarch64 \
      --input-dir platform-builds
 
-Use ``--kind compiler`` and output ``org.eclipse.cyclonedds.idlc-11.0.1.jar`` for
+Use ``--kind compiler`` and output ``org.eclipse.cyclonedds.idlc-11.1.0.jar`` for
 the compiler package. Inputs are checked for versions, checksums, conflicts and
 required platforms. Compiler classes/resources in a runtime package, and runtime
 classes/resources in a compiler package, are rejected. ZIP order/timestamps are
@@ -204,8 +204,8 @@ The equivalent explicit invocation is:
 .. code-block:: sh
 
    mvn -f maven/pom.xml \
-     -Dcyclonedds.runtime.jar="$PWD/build/org.eclipse.cyclonedds-11.0.1.jar" \
-     -Dcyclonedds.idlc.jar="$PWD/build/org.eclipse.cyclonedds.idlc-11.0.1.jar" install
+     -Dcyclonedds.runtime.jar="$PWD/build/org.eclipse.cyclonedds-11.1.0.jar" \
+     -Dcyclonedds.idlc.jar="$PWD/build/org.eclipse.cyclonedds.idlc-11.1.0.jar" install
 
 Maven packages the runtime as the main runtime artifact and adds compiler
 platform resources to the ``org.eclipse.cyclonedds.idlc`` JAR alongside its Maven
@@ -225,12 +225,17 @@ before tagging.
 Publishing a release
 --------------------
 
+The Java ``11.1.0`` release requires the matching Cyclone DDS core ``11.1.0``
+release. Core ``11.0.1`` lacks the CDR, next-instance collector and IDL APIs used
+by this binding, and lacks native Windows ARM64 stacktrace support. Release
+builds use the unmodified matching core tag on every platform.
+
 The ``Release to Maven Central`` workflow (``.github/workflows/release.yml``) runs
 on pushed tags matching ``[0-9]+.[0-9]+.[0-9]+*``. It calls the reusable
 ``universal.yml`` workflow for the normal platform builds and tests,
 then automatically publishes to Maven Central after all five universal-JAR host
 checks pass. The existing version check requires ``X.Y.Z`` (for example
-``11.0.1``), without a suffix or snapshot. The tag version must match the
+``11.1.0``), without a suffix or snapshot. The tag version must match the
 root POM, parent POM, compiler parent version and CMake project version. The C
 repository must contain the **exact same tag**. Tags with a ``v`` prefix are rejected.
 Pull requests, branch pushes and manual workflow runs never publish.
@@ -280,13 +285,13 @@ GPG signer selects ``GPG_KEY_ID`` and reads the passphrase from the
 publication job, after the reusable build succeeds. No extra GitHub token
 permission is required beyond ``contents: read``.
 
-For example, after all versions are updated to ``11.0.1`` and the C repository
-has ``11.0.1``, push the Java release tag:
+For example, after all versions are updated to ``11.1.0`` and the C repository
+has ``11.1.0``, push the Java release tag:
 
 .. code-block:: sh
 
-   git tag -a 11.0.1 -m "Cyclone DDS Java 11.0.1"
-   git push origin 11.0.1
+   git tag -a 11.1.0 -m "Cyclone DDS Java 11.1.0"
+   git push origin 11.1.0
 
 Local deployment dry run (requires an imported GPG signing key and
 ``MAVEN_GPG_PASSPHRASE`` in the environment, but no

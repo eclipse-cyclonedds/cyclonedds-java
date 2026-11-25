@@ -20,7 +20,7 @@ Use JDK 17+ and Maven 3.9+. Add this dependency to your project's `pom.xml`:
 <dependency>
   <groupId>org.eclipse.cyclonedds</groupId>
   <artifactId>org.eclipse.cyclonedds</artifactId>
-  <version>11.0.1</version>
+  <version>11.1.0</version>
 </dependency>
 ```
 
@@ -47,7 +47,7 @@ IDL generator to your Maven project's `pom.xml`:
 ```xml
 <properties>
   <maven.compiler.release>17</maven.compiler.release>
-  <cyclonedds.version>11.0.1</cyclonedds.version>
+  <cyclonedds.version>11.1.0</cyclonedds.version>
 </properties>
 <dependencies>
   <dependency>

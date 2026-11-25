@@ -11,9 +11,9 @@
 cmake_minimum_required(VERSION 3.21)
 option(BUILD_NATIVE_ONLY "Build only the JNI library (for Android cross-compilation)" OFF)
 if(BUILD_NATIVE_ONLY)
-  project(CycloneDDSJava VERSION 11.0.1 LANGUAGES C)
+  project(CycloneDDSJava VERSION 11.1.0 LANGUAGES C)
 else()
-  project(CycloneDDSJava VERSION 11.0.1 LANGUAGES C Java)
+  project(CycloneDDSJava VERSION 11.1.0 LANGUAGES C Java)
 endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -23,7 +23,8 @@ if(MSVC)
 endif()
 
 # Branch CI follows core master; its version can differ from the Java artifact.
-find_package(CycloneDDS REQUIRED)
+# The binding uses CDR, collector and IDL APIs introduced in core 11.1.
+find_package(CycloneDDS 11.1 REQUIRED)
 if(BUILD_NATIVE_ONLY)
   include(GNUInstallDirs)
   add_subdirectory(src/jni)
@@ -162,6 +163,9 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/upstream/audit.py" --check --build "${CMAKE_CURRENT_BINARY_DIR}")
   endif()
   if(Python3_Interpreter_FOUND)
+    add_test(NAME core-notices COMMAND "${Python3_EXECUTABLE}"
+      "${PROJECT_SOURCE_DIR}/tests/core_notices.py" "${CMAKE_COMMAND}"
+      "${PROJECT_SOURCE_DIR}/cmake/CoreNotices.cmake")
     add_test(NAME idlc-bundle COMMAND "${Python3_EXECUTABLE}"
       "${PROJECT_SOURCE_DIR}/tests/idlc_bundle.py" "${Java_JAVA_EXECUTABLE}" "${Java_JAVAC_EXECUTABLE}"
       "${UNIVERSAL_IDLC_JAR}" "${UNIVERSAL_RUNTIME_JAR}" "${PROJECT_SOURCE_DIR}")

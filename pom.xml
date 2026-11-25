@@ -15,12 +15,12 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
   <parent>
     <groupId>org.eclipse.cyclonedds</groupId>
     <artifactId>org.eclipse.cyclonedds-build</artifactId>
-    <version>11.0.1</version>
+    <version>11.1.0</version>
     <relativePath>maven/pom.xml</relativePath>
   </parent>
   <groupId>org.eclipse.cyclonedds</groupId>
   <artifactId>org.eclipse.cyclonedds</artifactId>
-  <version>11.0.1</version>
+  <version>11.1.0</version>
   <name>Cyclone DDS Java runtime</name>
   <description>The official Java binding for Eclipse Cyclone DDS</description>
   <licenses>

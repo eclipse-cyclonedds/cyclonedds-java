@@ -15,7 +15,7 @@ SPDX-License-Identifier: EPL-2.0 OR BSD-3-Clause
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.eclipse.cyclonedds</groupId>
   <artifactId>org.eclipse.cyclonedds-build</artifactId>
-  <version>11.0.1</version>
+  <version>11.1.0</version>
   <packaging>pom</packaging>
   <name>Cyclone DDS Java build tools</name>
   <description>Parent and release build for the Eclipse Cyclone DDS Java binding and IDL compiler.</description>
