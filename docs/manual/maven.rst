@@ -225,9 +225,12 @@ before tagging.
 Publishing a release
 --------------------
 
-Pushing a tag ``X.Y.Z`` (for example ``11.0.1``) runs the normal platform builds and tests,
+The ``Release to Maven Central`` workflow (``.github/workflows/release.yml``) runs
+on pushed tags matching ``[0-9]+.[0-9]+.[0-9]+*``. It calls the reusable
+``universal.yml`` workflow for the normal platform builds and tests,
 then automatically publishes to Maven Central after all five universal-JAR host
-checks pass. The tag version must match the
+checks pass. The existing version check requires ``X.Y.Z`` (for example
+``11.0.1``), without a suffix or snapshot. The tag version must match the
 root POM, parent POM, compiler parent version and CMake project version. The C
 repository must contain the **exact same tag**. Tags with a ``v`` prefix are rejected.
 Pull requests, branch pushes and manual workflow runs never publish.
@@ -261,23 +264,21 @@ One-time account and signing setup:
 
    Keep the exported private key outside the checkout. Central needs the public
    key to verify signatures; see https://central.sonatype.org/publish/requirements/gpg/.
-#. In GitHub, open **Settings > Secrets and variables > Actions > New repository
-   secret** and add:
+#. Make the following GitHub organization Actions secrets available to this
+   repository (or configure repository secrets with the same names):
 
-   =============================  ================================================
-   Secret                         Value
-   =============================  ================================================
-   ``MAVEN_CENTRAL_USERNAME``     Generated Central Portal token username
-   ``MAVEN_CENTRAL_PASSWORD``     Generated Central Portal token password
-   ``MAVEN_GPG_KEY``              Entire ASCII-armored exported private key
-   ``MAVEN_GPG_PASSPHRASE``       Signing key passphrase
-   ``MAVEN_GPG_KEY_FINGERPRINT``  Optional: fingerprint if exporting multiple keys
-   =============================  ================================================
+   * ``CENTRAL_SONATYPE_TOKEN_USERNAME``: generated Central Portal token username.
+   * ``CENTRAL_SONATYPE_TOKEN_PASSWORD``: generated Central Portal token password.
+   * ``GPG_PRIVATE_KEY``: entire ASCII-armored exported private key.
+   * ``GPG_PASSPHRASE``: signing key passphrase.
+   * ``GPG_KEY_ID``: signing key ID or fingerprint.
 
-The signing plugin reads these environment variables directly using its Java
-BC signer; no GPG executable or key import is required on the runner. Secrets
-are supplied only to the tag publication step. No extra GitHub token permission
-is required beyond the workflow's existing ``contents: read``.
+The release job imports the private key through ``actions/setup-java``. Maven's
+GPG signer selects ``GPG_KEY_ID`` and reads the passphrase from the
+``MAVEN_GPG_PASSPHRASE`` environment variable. The Central token is mapped to the
+``central`` server in ``.github/maven-settings.xml``. Secrets are used only in the
+publication job, after the reusable build succeeds. No extra GitHub token
+permission is required beyond ``contents: read``.
 
 For example, after all versions are updated to ``11.0.1`` and the C repository
 has ``11.0.1``, push the Java release tag:
@@ -287,13 +288,15 @@ has ``11.0.1``, push the Java release tag:
    git tag -a 11.0.1 -m "Cyclone DDS Java 11.0.1"
    git push origin 11.0.1
 
-Local deployment dry run (requires a signing key in the environment, but no
+Local deployment dry run (requires an imported GPG signing key and
+``MAVEN_GPG_PASSPHRASE`` in the environment, but no
 Central credentials and **does not upload**):
 
 .. code-block:: sh
 
    mvn --settings .github/maven-settings.xml -f maven/pom.xml \
      -Prelease-artifacts,central-release -DskipUpload=true \
+     -Dgpg.keyname=YOUR_KEY_ID \
      -Dcyclonedds.runtime.jar=/absolute/path/to/verified-runtime.jar \
      -Dcyclonedds.idlc.verifiedJar=/absolute/path/to/verified-compiler.jar deploy
 
